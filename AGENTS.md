@@ -107,3 +107,186 @@ git push                # Push to remote
 - Always `bd sync` before ending session
 
 <!-- end-bv-agent-instructions -->
+
+---
+
+## Multi-Agent Collaboration
+
+When multiple agents work on this repository simultaneously, follow these practices to avoid conflicts and ensure smooth collaboration.
+
+### Use Git Worktrees (Required)
+
+Each agent MUST use a dedicated git worktree for their work. This isolates changes and prevents file-level conflicts.
+
+```bash
+# Create a worktree for your task (from the main repo)
+git worktree add ../mellea-<issue-id> -b <issue-id>
+
+# Example: Working on beads-abc123
+git worktree add ../mellea-beads-abc123 -b beads-abc123
+
+# Navigate to your worktree
+cd ../mellea-beads-abc123
+
+# When done, clean up the worktree
+git worktree remove ../mellea-<issue-id>
+```
+
+**Worktree Rules:**
+- One worktree per issue/task
+- Branch name should match the issue ID
+- Always work in your worktree, not the main repo
+- Remove worktrees after merging
+
+### Branch Strategy
+
+```bash
+# Branch naming convention
+<issue-id>           # e.g., beads-abc123
+<type>/<description> # e.g., feature/add-auth, fix/login-bug
+
+# Always create branches from latest main
+git fetch origin
+git checkout -b <branch> origin/main
+```
+
+### Collision Prevention
+
+1. **Claim work before starting** - Use `bd update <id> --status=in_progress` so other agents know you're working on it
+2. **Keep changes focused** - One issue per branch, minimal file changes
+3. **Pull frequently** - Rebase onto main regularly to catch conflicts early
+4. **Don't modify shared files unnecessarily** - If you must edit a shared file (e.g., config), coordinate via issues
+5. **Small, atomic commits** - Easier to resolve conflicts and review
+
+### Pull Request Workflow
+
+For non-trivial changes, create a PR instead of pushing directly to main:
+
+```bash
+# Push your branch
+git push -u origin <branch>
+
+# Create PR (use gh CLI)
+gh pr create --title "<issue-id>: Brief description" \
+  --body "Closes #<issue-number-if-applicable>
+
+## Summary
+- What changed
+
+## Test Plan
+- How to verify"
+
+# After approval, merge
+gh pr merge --squash --delete-branch
+```
+
+**When to use PRs:**
+- Any feature or significant change
+- Changes affecting shared code or APIs
+- When you want review before merging
+
+**When direct push is OK:**
+- Trivial fixes (typos, formatting)
+- Documentation updates
+- Issue tracking updates (bd sync)
+
+### Quality Gates
+
+Before pushing ANY code changes:
+
+```bash
+# 1. Run tests
+make test          # or: npm test, go test ./..., pytest, etc.
+
+# 2. Run linter/formatter
+make lint          # or: npm run lint, golangci-lint run, etc.
+
+# 3. Build (if applicable)
+make build         # or: npm run build, go build, etc.
+
+# 4. Verify nothing unexpected changed
+git status
+git diff --stat origin/main
+```
+
+**Rule: Never push code that breaks tests or fails linting.**
+
+### Sync Protocol for Multiple Agents
+
+```bash
+# Before starting work
+git fetch origin
+git rebase origin/main  # or merge if you prefer
+
+# During work (periodically)
+git fetch origin
+git rebase origin/main  # Resolve conflicts early
+
+# Before pushing
+git fetch origin
+git rebase origin/main
+# Run quality gates
+git push
+
+# If push is rejected (someone else pushed)
+git fetch origin
+git rebase origin/main
+# Re-run quality gates
+git push
+```
+
+### Communication via Issues
+
+Use beads issues to coordinate:
+
+```bash
+# Signal that you're working on something
+bd update <id> --status=in_progress
+
+# Add comments to share context
+bd comments <id> add "Starting work on the API endpoints"
+
+# Create blocking issues for discovered dependencies
+bd create --title="Need to refactor X first" --type=task
+bd dep add <original-issue> <new-issue>
+
+# Check what others are working on
+bd list --status=in_progress
+```
+
+### Conflict Resolution
+
+If you encounter merge conflicts:
+
+1. **Don't panic** - Conflicts are normal in collaborative development
+2. **Understand both changes** - Read what you changed vs what they changed
+3. **Preserve intent** - Keep the functionality both changes intended
+4. **Re-run tests** - After resolving, verify everything still works
+5. **Ask for help** - If unsure, create an issue and ask
+
+```bash
+# After resolving conflicts
+git add <resolved-files>
+git rebase --continue  # or git merge --continue
+make test              # Verify resolution didn't break anything
+```
+
+### Summary Checklist
+
+**Starting work:**
+- [ ] Check `bd ready` for available work
+- [ ] Claim the issue with `bd update <id> --status=in_progress`
+- [ ] Create a worktree: `git worktree add ../mellea-<issue-id> -b <issue-id>`
+- [ ] Navigate to worktree and verify you're on the right branch
+
+**During work:**
+- [ ] Make small, focused commits
+- [ ] Rebase onto main periodically
+- [ ] Run tests before committing
+
+**Finishing work:**
+- [ ] Run all quality gates (test, lint, build)
+- [ ] Create PR for significant changes (or push directly for trivial fixes)
+- [ ] Close the issue: `bd close <id>`
+- [ ] Sync beads: `bd sync`
+- [ ] Remove worktree: `git worktree remove ../mellea-<issue-id>`
