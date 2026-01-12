@@ -8,3 +8,11 @@ __pycache__/
 
 # Data directory (development)
 backend/data/
+data/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Compiled vite config
+frontend/vite.config.js
+frontend/vite.config.d.ts
