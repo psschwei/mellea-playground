@@ -66,7 +66,7 @@ class User(BaseModel):
     # Authentication
     auth_provider: AuthProvider = Field(default=AuthProvider.LOCAL, alias="authProvider")
     external_id: str | None = Field(default=None, alias="externalId")
-    password_hash: str | None = Field(default=None, alias="passwordHash", exclude=True)
+    password_hash: str | None = Field(default=None, alias="passwordHash")
 
     # Authorization
     role: UserRole = UserRole.END_USER

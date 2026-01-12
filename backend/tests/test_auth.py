@@ -1,6 +1,7 @@
 """Tests for authentication endpoints and services."""
 
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -20,8 +21,14 @@ from mellea_api.services.auth import AuthService
 
 @pytest.fixture
 def client() -> TestClient:
-    """Create a test client."""
-    return TestClient(app)
+    """Create a test client with fresh auth service state."""
+    import mellea_api.services.auth as auth_module
+
+    # Clear cached auth service to ensure fresh state
+    auth_module._auth_service = None
+
+    with TestClient(app) as client:
+        yield client
 
 
 class TestPasswordHashing:
@@ -82,7 +89,7 @@ class TestAuthService:
     """Tests for AuthService."""
 
     @pytest.fixture
-    def auth_service(self) -> AuthService:
+    def auth_service(self) -> Iterator[AuthService]:
         """Create an auth service with temporary storage."""
         with tempfile.TemporaryDirectory() as tmpdir:
             settings = Settings(data_dir=Path(tmpdir))
@@ -139,8 +146,8 @@ class TestAuthService:
         auth_service.seed_default_users()
 
         admin = auth_service.get_user_by_email("admin@mellea.dev")
-        developer = auth_service.get_user_by_email("developer@mellea.local")
-        user = auth_service.get_user_by_email("user@mellea.local")
+        developer = auth_service.get_user_by_email("developer@mellea.dev")
+        user = auth_service.get_user_by_email("user@mellea.dev")
 
         assert admin is not None
         assert admin.role == UserRole.ADMIN
