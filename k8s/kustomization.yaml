@@ -17,5 +17,8 @@ resources:
   - redis/redis-config.yaml
   - redis/redis-deployment.yaml
 
+  # Backend API
+  - backend/deployment.yaml
+
 commonLabels:
   app.kubernetes.io/managed-by: kustomize
