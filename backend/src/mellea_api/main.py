@@ -9,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from mellea_api.core.config import get_settings
 from mellea_api.core.telemetry import setup_telemetry
-from mellea_api.routes import health_router
+from mellea_api.routes import auth_router, health_router
+from mellea_api.services.auth import get_auth_service
 
 # Configure logging
 logging.basicConfig(
@@ -30,6 +31,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Ensure data directories exist
     settings.ensure_data_dirs()
     logger.info(f"Data directory: {settings.data_dir}")
+
+    # Seed default users in development mode
+    if settings.environment == "development":
+        auth_service = get_auth_service()
+        auth_service.seed_default_users()
+        logger.info("Default users seeded")
 
     yield
 
@@ -64,6 +71,7 @@ def create_app() -> FastAPI:
 
     # Include routers
     app.include_router(health_router)
+    app.include_router(auth_router)
 
     return app
 

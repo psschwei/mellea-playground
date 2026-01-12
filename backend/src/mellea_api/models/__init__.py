@@ -14,9 +14,23 @@ from mellea_api.models.assets import (
     SlotSignature,
 )
 from mellea_api.models.common import SharingMode, RunStatus, ModelProvider, ModelScope
+from mellea_api.models.user import (
+    AuthConfig,
+    AuthProvider,
+    TokenResponse,
+    User,
+    UserCreate,
+    UserLogin,
+    UserPublic,
+    UserQuotas,
+    UserRole,
+    UserStatus,
+)
 
 __all__ = [
     "AssetMetadata",
+    "AuthConfig",
+    "AuthProvider",
     "CompositionAsset",
     "DependencySpec",
     "ModelAsset",
@@ -31,4 +45,12 @@ __all__ = [
     "SharingMode",
     "SlotMetadata",
     "SlotSignature",
+    "TokenResponse",
+    "User",
+    "UserCreate",
+    "UserLogin",
+    "UserPublic",
+    "UserQuotas",
+    "UserRole",
+    "UserStatus",
 ]
