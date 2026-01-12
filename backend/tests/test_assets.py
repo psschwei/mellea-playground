@@ -50,7 +50,7 @@ def sample_program():
         name="Test Program",
         owner="user-123",
         entrypoint="src/main.py",
-        project_root="workspaces/test-prog",
+        projectRoot="workspaces/test-prog",
         dependencies=DependencySpec(source=DependencySource.PYPROJECT),
         tags=["test", "sample"],
     )
@@ -63,8 +63,8 @@ def sample_model():
         name="Test Model",
         owner="user-123",
         provider=ModelProvider.OPENAI,
-        model_id="gpt-4",
-        default_params=ModelParams(temperature=0.7),
+        modelId="gpt-4",
+        defaultParams=ModelParams(temperature=0.7),
         tags=["test"],
     )
 
@@ -144,7 +144,7 @@ class TestProgramOperations:
             name="Other Program",
             owner="user-456",
             entrypoint="main.py",
-            project_root="workspaces/other",
+            projectRoot="workspaces/other",
             dependencies=DependencySpec(source=DependencySource.MANUAL),
         )
         service.create_program(other_program)
@@ -166,7 +166,7 @@ class TestProgramOperations:
             name="Other Program",
             owner="user-123",
             entrypoint="main.py",
-            project_root="workspaces/other",
+            projectRoot="workspaces/other",
             dependencies=DependencySpec(source=DependencySource.MANUAL),
             tags=["other"],
         )
@@ -200,7 +200,7 @@ class TestProgramOperations:
             name="Test",
             owner="user-123",
             entrypoint="main.py",
-            project_root="workspaces/test",
+            projectRoot="workspaces/test",
             dependencies=DependencySpec(source=DependencySource.MANUAL),
         )
         result = service.update_program("nonexistent", program)
@@ -263,8 +263,8 @@ class TestModelOperations:
             name="Anthropic Model",
             owner="user-123",
             provider=ModelProvider.ANTHROPIC,
-            model_id="claude-3",
-            default_params=ModelParams(),
+            modelId="claude-3",
+            defaultParams=ModelParams(),
         )
         service.create_model(other_model)
 
@@ -542,7 +542,7 @@ class TestSearchOperations:
             name="Other Program",
             owner="user-456",
             entrypoint="main.py",
-            project_root="workspaces/other",
+            projectRoot="workspaces/other",
             dependencies=DependencySpec(source=DependencySource.MANUAL),
         )
         service.create_program(other_program)
@@ -565,7 +565,7 @@ class TestSearchOperations:
             name="Other Program",
             owner="user-123",
             entrypoint="main.py",
-            project_root="workspaces/other",
+            projectRoot="workspaces/other",
             dependencies=DependencySpec(source=DependencySource.MANUAL),
             tags=["other"],
         )

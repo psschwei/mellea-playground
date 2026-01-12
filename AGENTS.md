@@ -190,23 +190,28 @@ gh pr merge --squash --delete-branch
 - Documentation updates
 - Issue tracking updates (bd sync)
 
-### Quality Gates
+### Quality Gates (Pre-Push Hooks)
 
-Before pushing ANY code changes:
+This repo has **automatic pre-push hooks** that run CI checks before allowing a push. To enable them:
 
 ```bash
-# 1. Run tests
-make test          # or: npm test, go test ./..., pytest, etc.
+make setup-hooks   # One-time setup
+```
 
-# 2. Run linter/formatter
-make lint          # or: npm run lint, golangci-lint run, etc.
+The pre-push hook runs the same checks as CI:
+- Backend: ruff lint, mypy type check, pytest
+- Frontend: eslint, type-check
 
-# 3. Build (if applicable)
-make build         # or: npm run build, go build, etc.
+**If the hook blocks your push**, fix the issues and try again. To bypass (NOT recommended):
+```bash
+git push --no-verify
+```
 
-# 4. Verify nothing unexpected changed
-git status
-git diff --stat origin/main
+**Manual CI checks:**
+```bash
+make ci-check      # Run all CI checks
+make lint          # Just linting
+make test          # Just tests
 ```
 
 **Rule: Never push code that breaks tests or fails linting.**

@@ -1,8 +1,25 @@
 # Mellea Playground Makefile
-.PHONY: help cluster-up cluster-down cluster-status build load redis-cli clean
+.PHONY: help cluster-up cluster-down cluster-status build load redis-cli clean \
+        ci-check lint test setup-hooks
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+# CI/Development
+setup-hooks: ## Install git hooks for pre-push CI checks
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed. Pre-push CI checks are now enabled."
+
+ci-check: ## Run all CI checks locally (same as pre-push hook)
+	./scripts/ci-check.sh
+
+lint: ## Run linting (ruff + mypy for backend, eslint for frontend)
+	@echo "=== Backend Lint ===" && ruff check backend/ && mypy backend/ --ignore-missing-imports
+	@if [ -f frontend/package.json ]; then echo "=== Frontend Lint ===" && cd frontend && npm run lint; fi
+
+test: ## Run all tests
+	pytest backend/tests/ -v
+	@if [ -f frontend/package.json ]; then cd frontend && npm test; fi
 
 # Cluster management
 cluster-up: ## Create and configure the kind cluster
