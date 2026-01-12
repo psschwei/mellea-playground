@@ -1,5 +1,11 @@
 # Agent Instructions
 
+## Repository
+
+- **Host**: github.com
+- **Repo**: psschwei/mellea-playground
+- **Remote**: git@github.com:psschwei/mellea-playground.git
+
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ## Quick Reference
