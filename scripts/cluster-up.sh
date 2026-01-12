@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Create and configure the Mellea kind cluster
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+CLUSTER_NAME="mellea"
+
+cd "$PROJECT_ROOT"
+
+echo "==> Creating kind cluster '$CLUSTER_NAME'..."
+
+# Check if cluster already exists
+if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
+    echo "Cluster '$CLUSTER_NAME' already exists. Use 'cluster-down.sh' to delete it first."
+    exit 1
+fi
+
+# Create data directories for PersistentVolumes
+echo "==> Creating data directories..."
+mkdir -p data/{assets,workspaces,artifacts,redis}
+
+# Create the cluster
+kind create cluster --config k8s/kind-config.yaml
+
+# Wait for cluster to be ready
+echo "==> Waiting for cluster to be ready..."
+kubectl wait --for=condition=Ready nodes --all --timeout=120s
+
+# Apply namespaces
+echo "==> Creating namespaces..."
+kubectl apply -f k8s/namespaces/namespaces.yaml
+
+# Apply resource quotas and limit ranges
+echo "==> Applying resource quotas..."
+kubectl apply -f k8s/namespaces/resource-quotas.yaml
+
+# Apply network policies
+echo "==> Applying network policies..."
+kubectl apply -f k8s/namespaces/network-policies.yaml
+
+# Apply storage configuration
+echo "==> Configuring storage..."
+kubectl apply -f k8s/storage/storage-class.yaml
+kubectl apply -f k8s/storage/persistent-volumes.yaml
+kubectl apply -f k8s/storage/persistent-volume-claims.yaml
+
+# Deploy Redis
+echo "==> Deploying Redis..."
+kubectl apply -f k8s/redis/redis-config.yaml
+kubectl apply -f k8s/redis/redis-deployment.yaml
+
+# Wait for Redis to be ready
+echo "==> Waiting for Redis to be ready..."
+kubectl wait --for=condition=Available deployment/redis -n mellea-system --timeout=120s
+
+echo ""
+echo "==> Cluster '$CLUSTER_NAME' is ready!"
+echo ""
+echo "Cluster info:"
+echo "  - API Server: kubectl cluster-info"
+echo "  - Backend port: localhost:8080 (NodePort 30080)"
+echo "  - Frontend port: localhost:3000 (NodePort 30000)"
+echo "  - Redis port: localhost:6379 (NodePort 30379)"
+echo ""
+echo "Namespaces:"
+kubectl get namespaces -l app.kubernetes.io/part-of=mellea
+echo ""
+echo "Next steps:"
+echo "  1. Build your Docker images"
+echo "  2. Load them with: ./scripts/load-image.sh <image-name>"
+echo "  3. Deploy your services"

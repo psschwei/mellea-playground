@@ -1,0 +1,34 @@
+# Kubernetes namespaces for Mellea Playground
+# Provides isolation between different system components
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    mellea.io/component: system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mellea-builds
+  labels:
+    app.kubernetes.io/part-of: mellea
+    mellea.io/component: builds
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mellea-runs
+  labels:
+    app.kubernetes.io/part-of: mellea
+    mellea.io/component: runs
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mellea-credentials
+  labels:
+    app.kubernetes.io/part-of: mellea
+    mellea.io/component: credentials

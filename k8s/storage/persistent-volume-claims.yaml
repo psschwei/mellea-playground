@@ -1,0 +1,74 @@
+# PersistentVolumeClaims for Mellea services
+# These are used by the backend services to access storage
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mellea-assets-pvc
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: mellea-local
+  resources:
+    requests:
+      storage: 10Gi
+  selector:
+    matchLabels:
+      mellea.io/storage-type: assets
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mellea-workspaces-pvc
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: mellea-local
+  resources:
+    requests:
+      storage: 20Gi
+  selector:
+    matchLabels:
+      mellea.io/storage-type: workspaces
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mellea-artifacts-pvc
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: mellea-local
+  resources:
+    requests:
+      storage: 50Gi
+  selector:
+    matchLabels:
+      mellea.io/storage-type: artifacts
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mellea-redis-pvc
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: mellea-local
+  resources:
+    requests:
+      storage: 5Gi
+  selector:
+    matchLabels:
+      mellea.io/storage-type: redis

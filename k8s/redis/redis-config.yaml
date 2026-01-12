@@ -1,0 +1,33 @@
+# Redis ConfigMap for Mellea log streaming and caching
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    app.kubernetes.io/component: redis
+data:
+  redis.conf: |
+    # Memory management
+    maxmemory 512mb
+    maxmemory-policy allkeys-lru
+
+    # Persistence (for development - can disable for production)
+    save 900 1
+    save 300 10
+    save 60 10000
+    appendonly yes
+    appendfsync everysec
+
+    # Pub/Sub (for log streaming)
+    # No specific config needed, but ensure enough output buffers
+    client-output-buffer-limit pubsub 32mb 8mb 60
+
+    # General performance
+    tcp-keepalive 300
+    timeout 0
+
+    # Logging
+    loglevel notice

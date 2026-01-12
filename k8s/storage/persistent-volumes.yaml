@@ -1,0 +1,106 @@
+# PersistentVolumes for Mellea storage
+# Maps to host directories mounted in kind cluster
+---
+# Assets storage (programs, models, compositions metadata)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mellea-assets-pv
+  labels:
+    app.kubernetes.io/part-of: mellea
+    mellea.io/storage-type: assets
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: mellea-local
+  local:
+    path: /data/assets
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - mellea-control-plane
+---
+# Workspaces storage (program source files)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mellea-workspaces-pv
+  labels:
+    app.kubernetes.io/part-of: mellea
+    mellea.io/storage-type: workspaces
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: mellea-local
+  local:
+    path: /data/workspaces
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - mellea-control-plane
+---
+# Artifacts storage (run outputs, logs)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mellea-artifacts-pv
+  labels:
+    app.kubernetes.io/part-of: mellea
+    mellea.io/storage-type: artifacts
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: mellea-local
+  local:
+    path: /data/artifacts
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - mellea-control-plane
+---
+# Redis data storage
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mellea-redis-pv
+  labels:
+    app.kubernetes.io/part-of: mellea
+    mellea.io/storage-type: redis
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: mellea-local
+  local:
+    path: /data/redis
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - mellea-control-plane

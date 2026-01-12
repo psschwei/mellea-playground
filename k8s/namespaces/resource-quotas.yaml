@@ -1,0 +1,60 @@
+# Resource quotas for namespace isolation
+# Prevents runaway resource consumption in build and run namespaces
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: builds-quota
+  namespace: mellea-builds
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    pods: "10"
+    persistentvolumeclaims: "20"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: runs-quota
+  namespace: mellea-runs
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+    pods: "50"
+    persistentvolumeclaims: "100"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: mellea-runs
+spec:
+  limits:
+    - default:
+        cpu: "500m"
+        memory: 512Mi
+      defaultRequest:
+        cpu: "100m"
+        memory: 128Mi
+      type: Container
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: mellea-builds
+spec:
+  limits:
+    - default:
+        cpu: "1"
+        memory: 2Gi
+      defaultRequest:
+        cpu: "250m"
+        memory: 512Mi
+      type: Container

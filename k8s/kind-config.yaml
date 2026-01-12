@@ -1,0 +1,26 @@
+# Kind cluster configuration for Mellea Playground
+# Creates a single-node cluster with extra port mappings and storage mounts
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: mellea
+nodes:
+  - role: control-plane
+    # Port mappings for local access
+    extraPortMappings:
+      # API server (FastAPI backend)
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP
+      # Frontend dev server
+      - containerPort: 30000
+        hostPort: 3000
+        protocol: TCP
+      # Redis (for debugging)
+      - containerPort: 30379
+        hostPort: 6379
+        protocol: TCP
+    # Mount local storage directory for PersistentVolumes
+    extraMounts:
+      - hostPath: ./data
+        containerPath: /data
+        readOnly: false

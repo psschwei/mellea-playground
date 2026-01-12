@@ -1,0 +1,107 @@
+# Network policies for namespace isolation
+# Restricts traffic between namespaces and to external endpoints
+---
+# Allow runs namespace to only access LLM APIs (egress)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runs-egress-policy
+  namespace: mellea-runs
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+    - Ingress
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow access to Redis in mellea-system
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              mellea.io/component: system
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow HTTPS egress for LLM APIs
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+  ingress:
+    # Only allow traffic from mellea-system (the API server)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              mellea.io/component: system
+---
+# Build namespace: more restricted, no external access needed
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: builds-network-policy
+  namespace: mellea-builds
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+    - Ingress
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow HTTPS for pip/package downloads
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+  ingress:
+    # Only from mellea-system
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              mellea.io/component: system
+---
+# Credentials namespace: highly restricted
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: credentials-network-policy
+  namespace: mellea-credentials
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only from mellea-system
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              mellea.io/component: system
+  egress: []

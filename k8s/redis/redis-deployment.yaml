@@ -1,0 +1,102 @@
+# Redis Deployment for Mellea
+# Used for log streaming (pub/sub) and caching
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    app.kubernetes.io/component: redis
+    app.kubernetes.io/name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: mellea
+        app.kubernetes.io/component: redis
+        app.kubernetes.io/name: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+              name: redis
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          volumeMounts:
+            - name: config
+              mountPath: /etc/redis
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: redis-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: mellea-redis-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    app.kubernetes.io/component: redis
+spec:
+  selector:
+    app.kubernetes.io/name: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+  type: ClusterIP
+---
+# NodePort service for local debugging access
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-nodeport
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    app.kubernetes.io/component: redis
+spec:
+  selector:
+    app.kubernetes.io/name: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+      nodePort: 30379
+      name: redis
+  type: NodePort

@@ -1,0 +1,21 @@
+# Kustomization for deploying all Mellea infrastructure
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Namespaces (apply first)
+  - namespaces/namespaces.yaml
+  - namespaces/resource-quotas.yaml
+  - namespaces/network-policies.yaml
+
+  # Storage
+  - storage/storage-class.yaml
+  - storage/persistent-volumes.yaml
+  - storage/persistent-volume-claims.yaml
+
+  # Redis
+  - redis/redis-config.yaml
+  - redis/redis-deployment.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
