@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  claude-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TZ: ${TZ:-UTC}
+        CLAUDE_CODE_VERSION: latest
+    container_name: claude-sandbox
+    hostname: claude-sandbox
+
+    # Required for firewall setup
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+    # Mount your project directory and Claude config
+    volumes:
+      - ..:/workspace:delegated
+      - ~/.claude:/home/node/.claude:delegated
+      - commandhistory:/commandhistory
+
+    # Optional: override with env var if set
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - NODE_OPTIONS=--max-old-space-size=4096
+
+    working_dir: /workspace
+    user: node
+
+    # Initialize firewall on startup, then drop into shell
+    command: >
+      bash -c "sudo /usr/local/bin/init-firewall.sh &&
+               echo '✓ Sandbox ready. Run: claude --dangerously-skip-permissions' &&
+               exec bash"
+
+    stdin_open: true
+    tty: true
+
+volumes:
+  commandhistory:

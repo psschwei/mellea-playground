@@ -1,0 +1,35 @@
+{
+    "name": "Claude Code Sandbox",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {
+            "TZ": "${localEnv:TZ:UTC}",
+            "CLAUDE_CODE_VERSION": "latest"
+        }
+    },
+    "runArgs": [
+        "--cap-add=NET_ADMIN",
+        "--cap-add=NET_RAW"
+    ],
+    "containerEnv": {
+        "NODE_OPTIONS": "--max-old-space-size=4096"
+    },
+    "mounts": [
+        "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+        "source=claude-config,target=/home/node/.claude,type=volume",
+        "source=commandhistory,target=/commandhistory,type=volume"
+    ],
+    "remoteUser": "node",
+    "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+    "waitFor": "postStartCommand",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "anthropics.claude-code"
+            ],
+            "settings": {
+                "terminal.integrated.defaultProfile.linux": "bash"
+            }
+        }
+    }
+}
