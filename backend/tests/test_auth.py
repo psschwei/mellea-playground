@@ -20,7 +20,7 @@ from mellea_api.services.auth import AuthService
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client() -> Iterator[TestClient]:
     """Create a test client with fresh auth service state."""
     import mellea_api.services.auth as auth_module
 

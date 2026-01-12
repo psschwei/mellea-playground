@@ -1,6 +1,7 @@
 """Tests for JsonStore."""
 
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ class SampleItem(BaseModel):
 
 
 @pytest.fixture
-def temp_store() -> JsonStore[SampleItem]:
+def temp_store() -> Iterator[JsonStore[SampleItem]]:
     """Create a temporary JsonStore for testing."""
     with tempfile.TemporaryDirectory() as tmpdir:
         file_path = Path(tmpdir) / "items.json"

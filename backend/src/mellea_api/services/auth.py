@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from typing import TypedDict
 
 from mellea_api.core.config import Settings, get_settings
 from mellea_api.core.security import (
@@ -22,6 +23,13 @@ from mellea_api.models.user import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class _DefaultUserData(TypedDict):
+    email: str
+    password: str
+    display_name: str
+    role: UserRole
 
 
 class AuthenticationError(Exception):
@@ -208,7 +216,7 @@ class AuthService:
 
     def seed_default_users(self) -> None:
         """Seed default development users if they don't exist."""
-        default_users = [
+        default_users: list[_DefaultUserData] = [
             {
                 "email": "admin@mellea.dev",
                 "password": "admin123",
