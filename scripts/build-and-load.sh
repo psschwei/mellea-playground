@@ -11,15 +11,17 @@ cd "$PROJECT_ROOT"
 # Parse arguments
 BUILD_BACKEND=false
 BUILD_FRONTEND=false
+BUILD_BASE=false
 TAG="latest"
 
 usage() {
-    echo "Usage: $0 [--backend] [--frontend] [--all] [--tag <tag>]"
+    echo "Usage: $0 [--backend] [--frontend] [--base] [--all] [--tag <tag>]"
     echo ""
     echo "Options:"
     echo "  --backend   Build and load the backend image"
     echo "  --frontend  Build and load the frontend image"
-    echo "  --all       Build and load all images"
+    echo "  --base      Build and load base Python images (3.11, 3.12)"
+    echo "  --all       Build and load all images (includes base images)"
     echo "  --tag       Tag for the images (default: latest)"
     exit 1
 }
@@ -38,9 +40,14 @@ while [[ $# -gt 0 ]]; do
             BUILD_FRONTEND=true
             shift
             ;;
+        --base)
+            BUILD_BASE=true
+            shift
+            ;;
         --all)
             BUILD_BACKEND=true
             BUILD_FRONTEND=true
+            BUILD_BASE=true
             shift
             ;;
         --tag)
@@ -58,6 +65,31 @@ if ! kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
     echo "Error: Cluster '$CLUSTER_NAME' does not exist."
     echo "Run './scripts/cluster-up.sh' first."
     exit 1
+fi
+
+# Build base images first (other images may depend on them)
+if $BUILD_BASE; then
+    echo "==> Building base Python images..."
+
+    # Build Python 3.11 base image
+    if [ -f "base-images/python/Dockerfile.3.11" ]; then
+        echo "    Building mellea-python:3.11..."
+        docker build -t "mellea-python:3.11" -f base-images/python/Dockerfile.3.11 base-images/python/
+        echo "    Loading mellea-python:3.11 into cluster..."
+        kind load docker-image "mellea-python:3.11" --name "$CLUSTER_NAME"
+    else
+        echo "Warning: base-images/python/Dockerfile.3.11 not found, skipping"
+    fi
+
+    # Build Python 3.12 base image
+    if [ -f "base-images/python/Dockerfile.3.12" ]; then
+        echo "    Building mellea-python:3.12..."
+        docker build -t "mellea-python:3.12" -f base-images/python/Dockerfile.3.12 base-images/python/
+        echo "    Loading mellea-python:3.12 into cluster..."
+        kind load docker-image "mellea-python:3.12" --name "$CLUSTER_NAME"
+    else
+        echo "Warning: base-images/python/Dockerfile.3.12 not found, skipping"
+    fi
 fi
 
 if $BUILD_BACKEND; then
