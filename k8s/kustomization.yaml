@@ -20,5 +20,8 @@ resources:
   # Backend API
   - backend/deployment.yaml
 
+  # Frontend
+  - frontend/deployment.yaml
+
 commonLabels:
   app.kubernetes.io/managed-by: kustomize
