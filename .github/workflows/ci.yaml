@@ -215,12 +215,11 @@ jobs:
       - name: Create kind cluster
         uses: helm/kind-action@v1
         with:
-          cluster_name: mellea-test
           config: k8s/kind-config.yaml
 
       - name: Create data directories
         run: |
-          docker exec mellea-test-control-plane mkdir -p /data/{assets,workspaces,artifacts,redis}
+          docker exec mellea-control-plane mkdir -p /data/{assets,workspaces,artifacts,redis}
 
       - name: Apply Kubernetes manifests
         run: |
