@@ -20,7 +20,7 @@ interface HeaderProps {
   onMenuClick?: () => void;
 }
 
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header({ onMenuClick: _onMenuClick }: HeaderProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const bgColor = useColorModeValue('white', 'gray.800');
