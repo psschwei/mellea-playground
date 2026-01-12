@@ -1,20 +1,21 @@
 """Security utilities for password hashing and JWT tokens."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 
 from mellea_api.core.config import get_settings
 from mellea_api.models.user import UserRole
 
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hasher using Argon2 (recommended modern algorithm)
+_password_hasher = PasswordHasher()
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt.
+    """Hash a password using Argon2.
 
     Args:
         password: Plain text password
@@ -22,7 +23,7 @@ def hash_password(password: str) -> str:
     Returns:
         Hashed password string
     """
-    return pwd_context.hash(password)
+    return _password_hasher.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -35,7 +36,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         True if password matches, False otherwise
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        _password_hasher.verify(hashed_password, plain_password)
+        return True
+    except VerifyMismatchError:
+        return False
 
 
 def create_access_token(
@@ -62,7 +67,7 @@ def create_access_token(
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     expire = now + expires_delta
 
     payload: dict[str, Any] = {

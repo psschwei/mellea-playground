@@ -1,12 +1,14 @@
 """Health check endpoints for Kubernetes probes and monitoring."""
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from mellea_api.core.config import Settings, get_settings
+
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 router = APIRouter(tags=["health"])
 
@@ -29,7 +31,7 @@ class ReadinessResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check(settings: Settings = Depends(get_settings)) -> HealthResponse:
+async def health_check(settings: SettingsDep) -> HealthResponse:
     """Basic health check for liveness probe.
 
     Returns minimal information to confirm the service is running.
@@ -43,7 +45,7 @@ async def health_check(settings: Settings = Depends(get_settings)) -> HealthResp
 
 
 @router.get("/ready", response_model=ReadinessResponse)
-async def readiness_check(settings: Settings = Depends(get_settings)) -> ReadinessResponse:
+async def readiness_check(settings: SettingsDep) -> ReadinessResponse:
     """Readiness check for Kubernetes readiness probe.
 
     Verifies that all required dependencies are available.

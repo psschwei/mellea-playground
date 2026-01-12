@@ -210,19 +210,19 @@ class AuthService:
         """Seed default development users if they don't exist."""
         default_users = [
             {
-                "email": "admin@mellea.local",
+                "email": "admin@mellea.dev",
                 "password": "admin123",
                 "display_name": "Admin User",
                 "role": UserRole.ADMIN,
             },
             {
-                "email": "developer@mellea.local",
+                "email": "developer@mellea.dev",
                 "password": "dev123",
                 "display_name": "Developer User",
                 "role": UserRole.DEVELOPER,
             },
             {
-                "email": "user@mellea.local",
+                "email": "user@mellea.dev",
                 "password": "user123",
                 "display_name": "End User",
                 "role": UserRole.END_USER,

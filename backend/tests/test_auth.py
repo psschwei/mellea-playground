@@ -7,7 +7,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mellea_api.core.config import Settings
-from mellea_api.core.security import hash_password, verify_password, create_access_token, decode_access_token
+from mellea_api.core.security import (
+    create_access_token,
+    decode_access_token,
+    hash_password,
+    verify_password,
+)
 from mellea_api.main import app
 from mellea_api.models.user import UserRole
 from mellea_api.services.auth import AuthService
@@ -133,7 +138,7 @@ class TestAuthService:
         """Test seeding default users."""
         auth_service.seed_default_users()
 
-        admin = auth_service.get_user_by_email("admin@mellea.local")
+        admin = auth_service.get_user_by_email("admin@mellea.dev")
         developer = auth_service.get_user_by_email("developer@mellea.local")
         user = auth_service.get_user_by_email("user@mellea.local")
 
@@ -182,7 +187,7 @@ class TestAuthRoutes:
         login_response = client.post(
             "/api/v1/auth/login",
             json={
-                "email": "admin@mellea.local",
+                "email": "admin@mellea.dev",
                 "password": "admin123",
             },
         )
@@ -197,7 +202,7 @@ class TestAuthRoutes:
         response = client.post(
             "/api/v1/auth/login",
             json={
-                "email": "admin@mellea.local",
+                "email": "admin@mellea.dev",
                 "password": "wrong_password",
             },
         )
@@ -210,7 +215,7 @@ class TestAuthRoutes:
         login_response = client.post(
             "/api/v1/auth/login",
             json={
-                "email": "admin@mellea.local",
+                "email": "admin@mellea.dev",
                 "password": "admin123",
             },
         )
@@ -224,7 +229,7 @@ class TestAuthRoutes:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["email"] == "admin@mellea.local"
+        assert data["email"] == "admin@mellea.dev"
         assert data["role"] == "admin"
 
     def test_get_me_unauthenticated(self, client: TestClient) -> None:
