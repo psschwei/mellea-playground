@@ -2,7 +2,6 @@
 
 import logging
 from datetime import datetime
-from pathlib import Path
 
 from mellea_api.core.config import Settings, get_settings
 from mellea_api.core.security import (

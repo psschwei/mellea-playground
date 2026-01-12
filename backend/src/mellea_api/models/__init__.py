@@ -13,7 +13,7 @@ from mellea_api.models.assets import (
     SlotMetadata,
     SlotSignature,
 )
-from mellea_api.models.common import SharingMode, RunStatus, ModelProvider, ModelScope
+from mellea_api.models.common import ModelProvider, ModelScope, RunStatus, SharingMode
 from mellea_api.models.user import (
     AuthConfig,
     AuthProvider,

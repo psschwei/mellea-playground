@@ -1,5 +1,7 @@
 """Authentication routes for login, registration, and user info."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from mellea_api.core.config import Settings, get_settings
@@ -7,7 +9,6 @@ from mellea_api.core.deps import CurrentUser
 from mellea_api.models.user import (
     AuthConfig,
     TokenResponse,
-    User,
     UserCreate,
     UserLogin,
     UserPublic,
@@ -19,12 +20,15 @@ from mellea_api.services.auth import (
     get_auth_service,
 )
 
+SettingsDep = Annotated[Settings, Depends(get_settings)]
+AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 @router.get("/config", response_model=AuthConfig)
 async def get_auth_config(
-    settings: Settings = Depends(get_settings),
+    settings: SettingsDep,
 ) -> AuthConfig:
     """Get authentication configuration.
 
