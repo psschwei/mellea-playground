@@ -42,3 +42,7 @@ make help
 ## Development
 
 See [AGENTS.md](./AGENTS.md) for contributor guidelines, including multi-agent collaboration practices and git workflow.
+
+## License
+
+Apache 2.0 - see [LICENSE](./LICENSE) for details.
