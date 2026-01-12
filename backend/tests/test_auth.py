@@ -145,9 +145,9 @@ class TestAuthService:
         """Test seeding default users."""
         auth_service.seed_default_users()
 
-        admin = auth_service.get_user_by_email("admin@mellea.dev")
-        developer = auth_service.get_user_by_email("developer@mellea.dev")
-        user = auth_service.get_user_by_email("user@mellea.dev")
+        admin = auth_service.get_user_by_email("admin@example.com")
+        developer = auth_service.get_user_by_email("developer@example.com")
+        user = auth_service.get_user_by_email("user@example.com")
 
         assert admin is not None
         assert admin.role == UserRole.ADMIN
@@ -194,7 +194,7 @@ class TestAuthRoutes:
         login_response = client.post(
             "/api/v1/auth/login",
             json={
-                "email": "admin@mellea.dev",
+                "email": "admin@example.com",
                 "password": "admin123",
             },
         )
@@ -209,7 +209,7 @@ class TestAuthRoutes:
         response = client.post(
             "/api/v1/auth/login",
             json={
-                "email": "admin@mellea.dev",
+                "email": "admin@example.com",
                 "password": "wrong_password",
             },
         )
@@ -222,7 +222,7 @@ class TestAuthRoutes:
         login_response = client.post(
             "/api/v1/auth/login",
             json={
-                "email": "admin@mellea.dev",
+                "email": "admin@example.com",
                 "password": "admin123",
             },
         )
@@ -236,7 +236,7 @@ class TestAuthRoutes:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["email"] == "admin@mellea.dev"
+        assert data["email"] == "admin@example.com"
         assert data["role"] == "admin"
 
     def test_get_me_unauthenticated(self, client: TestClient) -> None:

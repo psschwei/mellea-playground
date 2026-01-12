@@ -218,19 +218,19 @@ class AuthService:
         """Seed default development users if they don't exist."""
         default_users: list[_DefaultUserData] = [
             {
-                "email": "admin@mellea.dev",
+                "email": "admin@example.com",
                 "password": "admin123",
                 "display_name": "Admin User",
                 "role": UserRole.ADMIN,
             },
             {
-                "email": "developer@mellea.dev",
+                "email": "developer@example.com",
                 "password": "dev123",
                 "display_name": "Developer User",
                 "role": UserRole.DEVELOPER,
             },
             {
-                "email": "user@mellea.dev",
+                "email": "user@example.com",
                 "password": "user123",
                 "display_name": "End User",
                 "role": UserRole.END_USER,
