@@ -1,5 +1,6 @@
 """Tests for EnvironmentBuilder service."""
 
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -280,6 +281,26 @@ class TestDockerfileGeneration:
         assert "requests==2.31.0" in requirements
         assert "pydantic==2.5.0" in requirements
 
+    def test_generate_deps_dockerfile_has_buildkit_syntax(
+        self, builder_service: EnvironmentBuilderService, sample_deps: DependencySpec
+    ):
+        """Test that Dockerfile contains BuildKit syntax header."""
+        dockerfile, _ = builder_service.generate_deps_dockerfile(sample_deps)
+
+        # BuildKit syntax directive must be on the first line
+        first_line = dockerfile.strip().split("\n")[0]
+        assert first_line == "# syntax=docker/dockerfile:1"
+
+    def test_generate_deps_dockerfile_has_pip_cache_mount(
+        self, builder_service: EnvironmentBuilderService, sample_deps: DependencySpec
+    ):
+        """Test that Dockerfile uses BuildKit cache mount for pip."""
+        dockerfile, _ = builder_service.generate_deps_dockerfile(sample_deps)
+
+        assert "--mount=type=cache,target=/root/.cache/pip" in dockerfile
+        # Should NOT use --no-cache-dir anymore
+        assert "--no-cache-dir" not in dockerfile
+
     def test_generate_deps_dockerfile_with_extras(
         self,
         builder_service: EnvironmentBuilderService,
@@ -451,6 +472,47 @@ class TestBuildImage:
         # Should call build twice (deps + program) because we forced rebuild
         assert mock_docker_client.images.build.call_count == 2
 
+    def test_build_dependency_layer_enables_buildkit(
+        self,
+        builder_service: EnvironmentBuilderService,
+        sample_program: ProgramAsset,
+        mock_docker_client: MagicMock,
+        temp_data_dir: Path,
+    ):
+        """Test that BuildKit is enabled during dependency layer build."""
+        # Setup workspace
+        workspace_path = temp_data_dir / "workspaces" / sample_program.id
+        workspace_path.mkdir(parents=True)
+        (workspace_path / "src").mkdir()
+        (workspace_path / "src" / "main.py").write_text("print('hello')")
+
+        # Track DOCKER_BUILDKIT value during build
+        buildkit_values_during_build = []
+
+        def capture_buildkit(*args, **kwargs):
+            buildkit_values_during_build.append(os.environ.get("DOCKER_BUILDKIT"))
+            return (MagicMock(), [])
+
+        mock_docker_client.images.build.side_effect = capture_buildkit
+        mock_docker_client.images.get.return_value = MagicMock(attrs={"Size": 1000})
+
+        # Clear DOCKER_BUILDKIT before test
+        old_buildkit = os.environ.pop("DOCKER_BUILDKIT", None)
+        try:
+            result = builder_service.build_image(sample_program, workspace_path)
+
+            assert result.success
+            # First build call is for deps layer - should have BUILDKIT=1
+            assert len(buildkit_values_during_build) == 2
+            assert buildkit_values_during_build[0] == "1"
+
+            # Verify DOCKER_BUILDKIT is restored after build
+            assert os.environ.get("DOCKER_BUILDKIT") is None
+        finally:
+            # Restore original value
+            if old_buildkit is not None:
+                os.environ["DOCKER_BUILDKIT"] = old_buildkit
+
 
 class TestVerifyCachedImage:
     """Tests for image verification."""
@@ -500,3 +562,261 @@ class TestPackagesHash:
         hash2 = builder_service.compute_packages_hash(sample_deps)
 
         assert hash1 == hash2
+
+
+class TestRegistryOperations:
+    """Tests for container registry push/pull operations."""
+
+    @pytest.fixture
+    def settings_with_registry(self, temp_data_dir: Path):
+        """Create test settings with registry configured."""
+        settings = Settings(
+            data_dir=temp_data_dir,
+            registry_url="registry.example.com",
+            registry_username="testuser",
+            registry_password="testpass",
+        )
+        settings.ensure_data_dirs()
+        return settings
+
+    @pytest.fixture
+    def builder_with_registry(
+        self, settings_with_registry: Settings, mock_docker_client: MagicMock
+    ):
+        """Create an EnvironmentBuilder service with registry configured."""
+        service = EnvironmentBuilderService(settings=settings_with_registry)
+        service._docker_client = mock_docker_client
+        return service
+
+    def test_get_full_image_tag_without_registry(
+        self, builder_service: EnvironmentBuilderService
+    ):
+        """Test get_full_image_tag returns original tag when no registry configured."""
+        result = builder_service.get_full_image_tag("mellea-deps:abc123")
+        assert result == "mellea-deps:abc123"
+
+    def test_get_full_image_tag_with_registry(
+        self, builder_with_registry: EnvironmentBuilderService
+    ):
+        """Test get_full_image_tag prefixes registry URL when configured."""
+        result = builder_with_registry.get_full_image_tag("mellea-deps:abc123")
+        assert result == "registry.example.com/mellea-deps:abc123"
+
+    def test_login_to_registry_no_registry_configured(
+        self, builder_service: EnvironmentBuilderService
+    ):
+        """Test login returns True when no registry is configured."""
+        result = builder_service.login_to_registry()
+        assert result is True
+
+    def test_login_to_registry_success(
+        self, builder_with_registry: EnvironmentBuilderService, mock_docker_client: MagicMock
+    ):
+        """Test successful registry login."""
+        result = builder_with_registry.login_to_registry()
+
+        assert result is True
+        assert builder_with_registry._registry_logged_in is True
+        mock_docker_client.login.assert_called_once_with(
+            username="testuser",
+            password="testpass",
+            registry="registry.example.com",
+        )
+
+    def test_login_to_registry_already_logged_in(
+        self, builder_with_registry: EnvironmentBuilderService, mock_docker_client: MagicMock
+    ):
+        """Test login is skipped if already logged in."""
+        builder_with_registry._registry_logged_in = True
+
+        result = builder_with_registry.login_to_registry()
+
+        assert result is True
+        mock_docker_client.login.assert_not_called()
+
+    def test_login_to_registry_missing_credentials(self, temp_data_dir: Path):
+        """Test login fails when credentials are missing."""
+        settings = Settings(
+            data_dir=temp_data_dir,
+            registry_url="registry.example.com",
+            # No username/password
+        )
+        settings.ensure_data_dirs()
+        service = EnvironmentBuilderService(settings=settings)
+
+        result = service.login_to_registry()
+
+        assert result is False
+        assert service._registry_logged_in is False
+
+    def test_login_to_registry_failure(
+        self, builder_with_registry: EnvironmentBuilderService, mock_docker_client: MagicMock
+    ):
+        """Test login handles Docker exception."""
+        from docker.errors import DockerException
+
+        mock_docker_client.login.side_effect = DockerException("Auth failed")
+
+        result = builder_with_registry.login_to_registry()
+
+        assert result is False
+        assert builder_with_registry._registry_logged_in is False
+
+    def test_push_image_no_registry(
+        self, builder_service: EnvironmentBuilderService, mock_docker_client: MagicMock
+    ):
+        """Test push returns False when no registry is configured."""
+        result = builder_service.push_image("mellea-deps:abc123")
+
+        assert result is False
+        mock_docker_client.images.push.assert_not_called()
+
+    def test_push_image_success(
+        self, builder_with_registry: EnvironmentBuilderService, mock_docker_client: MagicMock
+    ):
+        """Test successful image push."""
+        mock_image = MagicMock()
+        mock_docker_client.images.get.return_value = mock_image
+        mock_docker_client.images.push.return_value = iter([{"status": "Pushing"}])
+
+        result = builder_with_registry.push_image("mellea-deps:abc123")
+
+        assert result is True
+        mock_image.tag.assert_called_once_with("registry.example.com/mellea-deps:abc123")
+        mock_docker_client.images.push.assert_called_once_with(
+            "registry.example.com/mellea-deps:abc123", stream=True, decode=True
+        )
+
+    def test_push_image_error_in_output(
+        self, builder_with_registry: EnvironmentBuilderService, mock_docker_client: MagicMock
+    ):
+        """Test push handles error in push output."""
+        from mellea_api.services.environment_builder import RegistryPushError
+
+        mock_image = MagicMock()
+        mock_docker_client.images.get.return_value = mock_image
+        mock_docker_client.images.push.return_value = iter([
+            {"status": "Pushing"},
+            {"error": "denied: access forbidden"},
+        ])
+
+        with pytest.raises(RegistryPushError, match="Push failed"):
+            builder_with_registry.push_image("mellea-deps:abc123")
+
+    def test_push_image_not_found_locally(
+        self, builder_with_registry: EnvironmentBuilderService, mock_docker_client: MagicMock
+    ):
+        """Test push returns False when image not found locally."""
+        from docker.errors import ImageNotFound
+
+        mock_docker_client.images.get.side_effect = ImageNotFound("Not found")
+
+        result = builder_with_registry.push_image("mellea-deps:abc123")
+
+        assert result is False
+
+    def test_pull_image_no_registry(
+        self, builder_service: EnvironmentBuilderService, mock_docker_client: MagicMock
+    ):
+        """Test pull returns False when no registry is configured."""
+        result = builder_service.pull_image("mellea-deps:abc123")
+
+        assert result is False
+        mock_docker_client.images.pull.assert_not_called()
+
+    def test_pull_image_success(
+        self, builder_with_registry: EnvironmentBuilderService, mock_docker_client: MagicMock
+    ):
+        """Test successful image pull."""
+        mock_image = MagicMock()
+        mock_docker_client.images.get.return_value = mock_image
+
+        result = builder_with_registry.pull_image("mellea-deps:abc123")
+
+        assert result is True
+        mock_docker_client.images.pull.assert_called_once_with(
+            "registry.example.com/mellea-deps:abc123"
+        )
+        # Should tag the pulled image with the local tag
+        mock_image.tag.assert_called_once_with("mellea-deps:abc123")
+
+    def test_pull_image_not_found_in_registry(
+        self, builder_with_registry: EnvironmentBuilderService, mock_docker_client: MagicMock
+    ):
+        """Test pull returns False when image not in registry."""
+        from docker.errors import ImageNotFound
+
+        mock_docker_client.images.pull.side_effect = ImageNotFound("Not found")
+
+        result = builder_with_registry.pull_image("mellea-deps:abc123")
+
+        assert result is False
+
+    def test_build_image_with_push(
+        self,
+        builder_with_registry: EnvironmentBuilderService,
+        sample_program: ProgramAsset,
+        mock_docker_client: MagicMock,
+        temp_data_dir: Path,
+    ):
+        """Test build_image with push=True pushes images to registry."""
+        # Setup workspace
+        workspace_path = temp_data_dir / "workspaces" / sample_program.id
+        workspace_path.mkdir(parents=True)
+        (workspace_path / "src").mkdir()
+        (workspace_path / "src" / "main.py").write_text("print('hello')")
+
+        # Mock Docker
+        mock_image = MagicMock()
+        mock_docker_client.images.build.return_value = (mock_image, [])
+        mock_docker_client.images.get.return_value = mock_image
+        mock_docker_client.images.push.return_value = iter([{"status": "Pushing"}])
+
+        # Build with push
+        result = builder_with_registry.build_image(
+            sample_program, workspace_path, push=True
+        )
+
+        assert result.success
+        # Should have pushed both deps and program images
+        assert mock_docker_client.images.push.call_count == 2
+
+    def test_build_image_with_push_cache_hit_skips_deps_push(
+        self,
+        builder_with_registry: EnvironmentBuilderService,
+        sample_program: ProgramAsset,
+        sample_deps: DependencySpec,
+        mock_docker_client: MagicMock,
+        temp_data_dir: Path,
+    ):
+        """Test build with cache hit only pushes program image."""
+        # Setup workspace
+        workspace_path = temp_data_dir / "workspaces" / sample_program.id
+        workspace_path.mkdir(parents=True)
+        (workspace_path / "src").mkdir()
+        (workspace_path / "src" / "main.py").write_text("print('hello')")
+
+        # Pre-populate cache
+        cache_key = builder_with_registry.compute_cache_key(sample_deps)
+        deps_image_tag = f"mellea-deps:{cache_key[:12]}"
+        builder_with_registry.create_cache_entry(
+            cache_key=cache_key,
+            image_tag=deps_image_tag,
+            deps=sample_deps,
+        )
+
+        # Mock Docker
+        mock_image = MagicMock()
+        mock_docker_client.images.build.return_value = (mock_image, [])
+        mock_docker_client.images.get.return_value = mock_image
+        mock_docker_client.images.push.return_value = iter([{"status": "Pushing"}])
+
+        # Build with push
+        result = builder_with_registry.build_image(
+            sample_program, workspace_path, push=True
+        )
+
+        assert result.success
+        assert result.cache_hit is True
+        # Should only push program image (deps was cached, not rebuilt)
+        assert mock_docker_client.images.push.call_count == 1

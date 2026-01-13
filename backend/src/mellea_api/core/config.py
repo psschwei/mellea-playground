@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-key-change-in-production"
     access_token_expire_minutes: int = 60 * 24  # 24 hours
 
+    # Container Registry
+    registry_url: str | None = None  # e.g., "registry.example.com", "ghcr.io/user", "quay.io/org"
+    registry_username: str | None = None
+    registry_password: str | None = None
+
     def ensure_data_dirs(self) -> None:
         """Create data directory structure if it doesn't exist."""
         subdirs = ["metadata", "workspaces", "artifacts", "runs"]

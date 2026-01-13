@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import json
 import logging
+import os
 import tempfile
 import time
 from datetime import datetime
@@ -30,6 +31,18 @@ logger = logging.getLogger(__name__)
 
 class ImageBuildError(Exception):
     """Raised when image build fails."""
+
+    pass
+
+
+class RegistryPushError(Exception):
+    """Raised when pushing an image to the registry fails."""
+
+    pass
+
+
+class RegistryPullError(Exception):
+    """Raised when pulling an image from the registry fails."""
 
     pass
 
@@ -75,6 +88,7 @@ class EnvironmentBuilderService:
         self.settings = settings or get_settings()
         self._cache_store: JsonStore[LayerCacheEntry] | None = None
         self._docker_client: docker.DockerClient | None = None
+        self._registry_logged_in: bool = False
 
     # -------------------------------------------------------------------------
     # Lazy Initialization Properties
@@ -261,6 +275,151 @@ class EnvironmentBuilderService:
         return pruned
 
     # -------------------------------------------------------------------------
+    # Registry Operations
+    # -------------------------------------------------------------------------
+
+    def get_full_image_tag(self, image_tag: str) -> str:
+        """Prefix image tag with registry URL if configured.
+
+        Args:
+            image_tag: Local image tag (e.g., "mellea-deps:abc123")
+
+        Returns:
+            Full image tag with registry prefix if configured,
+            otherwise returns the original tag.
+
+        Example:
+            - Without registry: "mellea-deps:abc123" -> "mellea-deps:abc123"
+            - With registry: "mellea-deps:abc123" -> "registry.example.com/mellea-deps:abc123"
+        """
+        if self.settings.registry_url:
+            return f"{self.settings.registry_url}/{image_tag}"
+        return image_tag
+
+    def login_to_registry(self) -> bool:
+        """Authenticate with the container registry.
+
+        Uses credentials from settings. Called lazily before push/pull
+        operations when registry is configured.
+
+        Returns:
+            True if login succeeded or no registry configured,
+            False if login failed.
+        """
+        if not self.settings.registry_url:
+            return True
+
+        if self._registry_logged_in:
+            return True
+
+        if not self.settings.registry_username or not self.settings.registry_password:
+            logger.warning(
+                f"Registry URL configured ({self.settings.registry_url}) "
+                "but no credentials provided"
+            )
+            return False
+
+        try:
+            self.docker_client.login(
+                username=self.settings.registry_username,
+                password=self.settings.registry_password,
+                registry=self.settings.registry_url,
+            )
+            self._registry_logged_in = True
+            logger.info(f"Logged in to registry: {self.settings.registry_url}")
+            return True
+        except DockerException as e:
+            logger.warning(f"Failed to login to registry {self.settings.registry_url}: {e}")
+            return False
+
+    def push_image(self, image_tag: str) -> bool:
+        """Push an image to the container registry.
+
+        Args:
+            image_tag: The local image tag to push.
+
+        Returns:
+            True if push succeeded, False otherwise.
+
+        Raises:
+            RegistryPushError: If registry is configured but push fails.
+        """
+        if not self.settings.registry_url:
+            logger.debug("No registry configured, skipping push")
+            return False
+
+        if not self.login_to_registry():
+            logger.warning("Cannot push: registry login failed")
+            return False
+
+        full_tag = self.get_full_image_tag(image_tag)
+
+        try:
+            # Tag the image with the full registry path
+            local_image = self.docker_client.images.get(image_tag)
+            local_image.tag(full_tag)
+
+            # Push the image
+            logger.info(f"Pushing image: {full_tag}")
+            push_output = self.docker_client.images.push(full_tag, stream=True, decode=True)
+
+            for line in push_output:
+                if "error" in line:
+                    raise RegistryPushError(f"Push failed: {line['error']}")
+                if "status" in line:
+                    logger.debug(f"Push: {line.get('status', '')} {line.get('progress', '')}")
+
+            logger.info(f"Successfully pushed: {full_tag}")
+            return True
+
+        except ImageNotFound:
+            logger.warning(f"Cannot push: image not found locally: {image_tag}")
+            return False
+        except DockerException as e:
+            logger.warning(f"Failed to push image {full_tag}: {e}")
+            return False
+
+    def pull_image(self, image_tag: str) -> bool:
+        """Pull an image from the container registry.
+
+        Args:
+            image_tag: The image tag to pull (without registry prefix).
+
+        Returns:
+            True if pull succeeded, False otherwise.
+
+        Raises:
+            RegistryPullError: If registry is configured but pull fails.
+        """
+        if not self.settings.registry_url:
+            logger.debug("No registry configured, skipping pull")
+            return False
+
+        if not self.login_to_registry():
+            logger.warning("Cannot pull: registry login failed")
+            return False
+
+        full_tag = self.get_full_image_tag(image_tag)
+
+        try:
+            logger.info(f"Pulling image: {full_tag}")
+            self.docker_client.images.pull(full_tag)
+
+            # Tag the pulled image with the local tag for easier reference
+            pulled_image = self.docker_client.images.get(full_tag)
+            pulled_image.tag(image_tag)
+
+            logger.info(f"Successfully pulled and tagged: {image_tag}")
+            return True
+
+        except ImageNotFound:
+            logger.debug(f"Image not found in registry: {full_tag}")
+            return False
+        except DockerException as e:
+            logger.warning(f"Failed to pull image {full_tag}: {e}")
+            return False
+
+    # -------------------------------------------------------------------------
     # Dockerfile Generation
     # -------------------------------------------------------------------------
 
@@ -292,7 +451,8 @@ class EnvironmentBuilderService:
 
         requirements_content = "\n".join(requirements_lines)
 
-        dockerfile = f"""# Mellea Dependency Layer
+        dockerfile = f"""# syntax=docker/dockerfile:1
+# Mellea Dependency Layer
 # Auto-generated - do not edit manually
 
 FROM {base_image}
@@ -301,7 +461,8 @@ FROM {base_image}
 WORKDIR /app
 
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt && \\
+RUN --mount=type=cache,target=/root/.cache/pip \\
+    pip install -r /tmp/requirements.txt && \\
     rm /tmp/requirements.txt
 """
         return dockerfile, requirements_content
@@ -349,6 +510,7 @@ CMD ["python", "{program.entrypoint}"]
         program: ProgramAsset,
         workspace_path: Path,
         force_rebuild: bool = False,
+        push: bool = False,
     ) -> BuildResult:
         """Build a Docker image for a program with layer caching.
 
@@ -358,6 +520,7 @@ CMD ["python", "{program.entrypoint}"]
             program: The program to build an image for
             workspace_path: Path to the program's workspace directory
             force_rebuild: If True, skip cache lookup
+            push: If True, push the built images to the registry after build
 
         Returns:
             BuildResult with success status and details
@@ -390,6 +553,9 @@ CMD ["python", "{program.entrypoint}"]
                 deps_image_tag = self._build_dependency_layer(
                     program.dependencies, cache_key, context
                 )
+                # Push dependency layer to registry if requested
+                if push:
+                    self.push_image(deps_image_tag)
             context.deps_build_duration_seconds = time.time() - deps_build_start
             context.dependency_image_tag = deps_image_tag
 
@@ -401,6 +567,10 @@ CMD ["python", "{program.entrypoint}"]
             )
             context.program_build_duration_seconds = time.time() - program_build_start
             context.final_image_tag = final_image_tag
+
+            # Push program image to registry if requested
+            if push:
+                self.push_image(final_image_tag)
 
             # STAGE: Complete
             context.stage = BuildStage.COMPLETE
@@ -445,6 +615,8 @@ CMD ["python", "{program.entrypoint}"]
     ) -> str:
         """Build the dependency layer image.
 
+        Uses BuildKit for pip cache mounts to speed up subsequent builds.
+
         Args:
             deps: Dependency specification
             cache_key: Cache key for this dependency set
@@ -465,12 +637,22 @@ CMD ["python", "{program.entrypoint}"]
 
             logger.info(f"Building dependency layer: {image_tag}")
             try:
-                image, build_logs = self.docker_client.images.build(
-                    path=str(build_path),
-                    tag=image_tag,
-                    rm=True,
-                    pull=False,
-                )
+                # Enable BuildKit for cache mount support
+                old_buildkit = os.environ.get("DOCKER_BUILDKIT")
+                os.environ["DOCKER_BUILDKIT"] = "1"
+                try:
+                    image, build_logs = self.docker_client.images.build(
+                        path=str(build_path),
+                        tag=image_tag,
+                        rm=True,
+                        pull=False,
+                    )
+                finally:
+                    # Restore previous DOCKER_BUILDKIT value
+                    if old_buildkit is None:
+                        os.environ.pop("DOCKER_BUILDKIT", None)
+                    else:
+                        os.environ["DOCKER_BUILDKIT"] = old_buildkit
 
                 for log in build_logs:
                     if "stream" in log:

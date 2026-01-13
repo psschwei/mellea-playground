@@ -19,7 +19,14 @@ from mellea_api.models.build import (
     BuildStage,
     LayerCacheEntry,
 )
-from mellea_api.models.common import ModelProvider, ModelScope, RunStatus, SharingMode
+from mellea_api.models.common import (
+    EnvironmentStatus,
+    ModelProvider,
+    ModelScope,
+    RunStatus,
+    SharingMode,
+)
+from mellea_api.models.environment import Environment, ResourceLimits
 from mellea_api.models.user import (
     AuthConfig,
     AuthProvider,
@@ -42,6 +49,8 @@ __all__ = [
     "BuildStage",
     "CompositionAsset",
     "DependencySpec",
+    "Environment",
+    "EnvironmentStatus",
     "LayerCacheEntry",
     "ModelAsset",
     "ModelParams",
@@ -49,6 +58,7 @@ __all__ = [
     "ModelScope",
     "PackageRef",
     "ProgramAsset",
+    "ResourceLimits",
     "ResourceProfile",
     "RunStatus",
     "SharedAccess",

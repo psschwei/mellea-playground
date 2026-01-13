@@ -69,3 +69,30 @@ class Permission(str, Enum):
     VIEW = "view"
     RUN = "run"
     EDIT = "edit"
+
+
+class EnvironmentStatus(str, Enum):
+    """Status of an environment in its lifecycle.
+
+    State machine transitions:
+        CREATING -> READY (build succeeded)
+        CREATING -> FAILED (build failed)
+        READY -> STARTING (start requested)
+        STARTING -> RUNNING (container started)
+        STARTING -> FAILED (start failed)
+        RUNNING -> STOPPING (stop requested)
+        STOPPING -> STOPPED (container stopped)
+        RUNNING -> FAILED (runtime error)
+        READY -> DELETING (delete requested)
+        STOPPED -> DELETING (delete requested)
+        FAILED -> DELETING (delete requested)
+    """
+
+    CREATING = "creating"  # Initial state, being built
+    READY = "ready"  # Built and available
+    STARTING = "starting"  # Container starting
+    RUNNING = "running"  # Container running
+    STOPPING = "stopping"  # Container stopping
+    STOPPED = "stopped"  # Container stopped
+    FAILED = "failed"  # Build or runtime failure
+    DELETING = "deleting"  # Being cleaned up

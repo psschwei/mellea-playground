@@ -13,6 +13,12 @@ from mellea_api.services.auth import (
     RegistrationError,
     get_auth_service,
 )
+from mellea_api.services.environment import (
+    EnvironmentNotFoundError,
+    EnvironmentService,
+    InvalidStateTransitionError,
+    get_environment_service,
+)
 from mellea_api.services.environment_builder import (
     EnvironmentBuilderService,
     ImageBuildError,
@@ -31,6 +37,11 @@ __all__ = [
     "get_auth_service",
     "AuthenticationError",
     "RegistrationError",
+    # Environment service
+    "EnvironmentService",
+    "get_environment_service",
+    "EnvironmentNotFoundError",
+    "InvalidStateTransitionError",
     # Environment builder service
     "EnvironmentBuilderService",
     "get_environment_builder_service",
