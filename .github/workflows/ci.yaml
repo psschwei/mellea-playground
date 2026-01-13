@@ -174,7 +174,7 @@ jobs:
           push: false
           tags: mellea-backend:${{ github.sha }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Build frontend image
         if: hashFiles('frontend/Dockerfile') != ''
@@ -184,7 +184,7 @@ jobs:
           push: false
           tags: mellea-frontend:${{ github.sha }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
 
   # Validate Kubernetes manifests
   validate-k8s:
