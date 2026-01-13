@@ -31,10 +31,11 @@ mellea-playground/
 ```bash
 # Create cluster, build images, and deploy everything
 make spin-up-from-scratch
-
-# See all available commands
-make help
 ```
+
+Once running, access the application at:
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8080
 
 ## Development
 
