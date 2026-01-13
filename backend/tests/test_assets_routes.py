@@ -252,3 +252,166 @@ class TestGetAsset:
         response = client.get("/api/v1/assets/some-id")
 
         assert response.status_code == 401
+
+
+class TestListAssets:
+    """Tests for GET /api/v1/assets endpoint."""
+
+    def test_list_assets_requires_auth(self, client: TestClient) -> None:
+        """Test that listing assets requires authentication."""
+        response = client.get("/api/v1/assets")
+        assert response.status_code == 401
+
+    def test_list_assets_empty(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test listing assets when none exist."""
+        response = client.get("/api/v1/assets", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["assets"] == []
+        assert data["total"] == 0
+
+    def test_list_assets_returns_all_types(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test that listing returns all asset types."""
+        # Create one of each type
+        client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "program",
+                "name": "Test Program",
+                "entrypoint": "main.py",
+                "projectRoot": "workspaces/test",
+                "dependencies": {"source": "requirements"},
+            },
+        )
+        client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "model",
+                "name": "Test Model",
+                "provider": "openai",
+                "modelId": "gpt-4",
+            },
+        )
+        client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "composition",
+                "name": "Test Composition",
+            },
+        )
+
+        # List all
+        response = client.get("/api/v1/assets", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 3
+        types = {a["type"] for a in data["assets"]}
+        assert types == {"program", "model", "composition"}
+
+    def test_list_assets_filter_by_type(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test filtering assets by type."""
+        # Create assets of different types
+        client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "program",
+                "name": "Program 1",
+                "entrypoint": "main.py",
+                "projectRoot": "workspaces/p1",
+                "dependencies": {"source": "requirements"},
+            },
+        )
+        client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "model",
+                "name": "Model 1",
+                "provider": "anthropic",
+                "modelId": "claude-3",
+            },
+        )
+
+        # Filter by program
+        response = client.get("/api/v1/assets?type=program", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert data["assets"][0]["type"] == "program"
+
+        # Filter by model
+        response = client.get("/api/v1/assets?type=model", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert data["assets"][0]["type"] == "model"
+
+    def test_list_assets_filter_by_tags(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test filtering assets by tags."""
+        # Create assets with different tags
+        client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "composition",
+                "name": "Tagged 1",
+                "tags": ["ai", "testing"],
+            },
+        )
+        client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "composition",
+                "name": "Tagged 2",
+                "tags": ["production"],
+            },
+        )
+
+        # Filter by tag
+        response = client.get("/api/v1/assets?tags=ai", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert data["assets"][0]["name"] == "Tagged 1"
+
+    def test_list_assets_search_by_name(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test searching assets by name."""
+        # Create assets with distinct names
+        client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "composition",
+                "name": "My Special Workflow",
+            },
+        )
+        client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "composition",
+                "name": "Other Thing",
+            },
+        )
+
+        # Search
+        response = client.get("/api/v1/assets?q=special", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert "Special" in data["assets"][0]["name"]
