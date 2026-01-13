@@ -29,11 +29,8 @@ mellea-playground/
 ## Quick Start
 
 ```bash
-# Start the kind cluster
-make cluster-up
-
-# Run CI checks locally
-make ci-check
+# Create cluster, build images, and deploy everything
+make spin-up-from-scratch
 
 # See all available commands
 make help
