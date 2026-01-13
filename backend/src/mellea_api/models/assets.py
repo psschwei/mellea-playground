@@ -1,7 +1,7 @@
 """Asset models for Programs, Models, and Compositions."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -39,7 +39,7 @@ class AssetMetadata(BaseModel):
     description: str = ""
     tags: list[str] = Field(default_factory=list)
     version: str = "1.0.0"
-    owner: str
+    owner: str = ""
     sharing: SharingMode = SharingMode.PRIVATE
     shared_with: list[SharedAccess] = Field(default_factory=list, alias="sharedWith")
     created_at: datetime = Field(default_factory=datetime.utcnow, alias="createdAt")
@@ -109,7 +109,7 @@ class ResourceProfile(BaseModel):
 class ProgramAsset(AssetMetadata):
     """A Python program with mellea entrypoints and @generative slots."""
 
-    type: str = "program"
+    type: Literal["program"] = "program"
     entrypoint: str
     project_root: str = Field(alias="projectRoot")
     dependencies: DependencySpec
@@ -180,7 +180,7 @@ class AccessControl(BaseModel):
 class ModelAsset(AssetMetadata):
     """An LLM backend configuration."""
 
-    type: str = "model"
+    type: Literal["model"] = "model"
     provider: ModelProvider
     model_id: str = Field(alias="modelId")
     endpoint: EndpointConfig | None = None
@@ -211,7 +211,7 @@ class CompositionSpec(BaseModel):
 class CompositionAsset(AssetMetadata):
     """A visual workflow linking programs and models."""
 
-    type: str = "composition"
+    type: Literal["composition"] = "composition"
     program_refs: list[str] = Field(default_factory=list, alias="programRefs")
     model_refs: list[str] = Field(default_factory=list, alias="modelRefs")
     graph: CompositionGraph = Field(default_factory=CompositionGraph)
