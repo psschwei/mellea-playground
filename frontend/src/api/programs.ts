@@ -6,31 +6,29 @@ export const programsApi = {
    * Create a new program
    */
   create: async (data: CreateProgramRequest): Promise<ProgramAsset> => {
-    const response = await apiClient.post<ProgramAsset>('/assets', data);
-    return response.data;
+    const response = await apiClient.post<{ asset: ProgramAsset }>('/assets', data);
+    return response.data.asset;
   },
 
   /**
    * Get a program by ID
    */
   get: async (id: string): Promise<ProgramAsset> => {
-    const response = await apiClient.get<ProgramAsset>(`/assets/${id}`);
-    return response.data;
+    const response = await apiClient.get<{ asset: ProgramAsset }>(`/assets/${id}`);
+    return response.data.asset;
   },
 
   /**
    * List all programs for the current user
-   * Note: This endpoint needs to be implemented (f6f.7)
-   * For now, returns empty array as fallback
    */
   list: async (): Promise<ProgramAsset[]> => {
     try {
-      const response = await apiClient.get<ProgramAsset[]>('/assets', {
+      const response = await apiClient.get<{ assets: ProgramAsset[]; total: number }>('/assets', {
         params: { type: 'program' },
       });
-      return response.data;
+      return response.data.assets;
     } catch {
-      // Fallback until list endpoint is implemented
+      // Fallback on error
       console.warn('List programs endpoint not available, returning empty array');
       return [];
     }
