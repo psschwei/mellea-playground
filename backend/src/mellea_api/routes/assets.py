@@ -1,6 +1,6 @@
 """Asset routes for creating and retrieving catalog assets."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -8,9 +8,11 @@ from pydantic import BaseModel, Field
 from mellea_api.core.deps import CurrentUser
 from mellea_api.models.assets import (
     CompositionAsset,
+    DependencySpec,
     ModelAsset,
     ProgramAsset,
 )
+from mellea_api.models.common import DependencySource
 from mellea_api.services.assets import (
     AssetAlreadyExistsError,
     AssetService,
@@ -23,6 +25,26 @@ router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
 
 # Union type for all asset types
 AssetType = ProgramAsset | ModelAsset | CompositionAsset
+
+
+class CreateProgramRequest(BaseModel):
+    """Request model for creating a program from source code."""
+
+    type: Literal["program"] = "program"
+    name: str
+    description: str = ""
+    entrypoint: str = "main.py"
+    source_code: str = Field(alias="sourceCode")
+    tags: list[str] = Field(default_factory=list)
+
+    class Config:
+        populate_by_name = True
+
+
+# Union type for create asset requests
+# CreateProgramRequest must come before ProgramAsset so it's checked first
+# (ProgramAsset would fail validation on sourceCode requests)
+CreateAssetRequest = CreateProgramRequest | ProgramAsset | ModelAsset | CompositionAsset
 
 
 class AssetResponse(BaseModel):
@@ -89,29 +111,47 @@ async def list_assets(
 
 @router.post("", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
 async def create_asset(
-    asset: AssetType,
+    asset: CreateAssetRequest,
     current_user: CurrentUser,
     service: AssetServiceDep,
 ) -> AssetResponse:
     """Create a new asset (program, model, or composition).
 
     The asset type is determined by the 'type' field in the request body:
-    - "program": Create a Python program with entrypoint and dependencies
+    - "program": Create a Python program with entrypoint and source code
     - "model": Create an LLM model configuration
     - "composition": Create a workflow linking programs and models
 
     The owner is automatically set to the authenticated user.
     """
-    # Set owner to current user
-    asset.owner = current_user.id
-
     try:
         created: AssetType
-        if isinstance(asset, ProgramAsset):
+        if isinstance(asset, CreateProgramRequest):
+            # Convert CreateProgramRequest to ProgramAsset
+            program = ProgramAsset(
+                name=asset.name,
+                description=asset.description,
+                tags=asset.tags,
+                owner=current_user.id,
+                entrypoint=asset.entrypoint,
+                projectRoot="",  # Will be set after workspace creation
+                dependencies=DependencySpec(source=DependencySource.MANUAL),
+            )
+            created = service.create_program(program)
+            # Update project_root to point to workspace
+            created.project_root = f"workspaces/{created.id}"
+            service.update_program(created.id, created)
+            # Write source code to workspace
+            service.write_workspace_file(created.id, asset.entrypoint, asset.source_code)
+        elif isinstance(asset, ProgramAsset):
+            # Full ProgramAsset with projectRoot/dependencies provided directly
+            asset.owner = current_user.id
             created = service.create_program(asset)
         elif isinstance(asset, ModelAsset):
+            asset.owner = current_user.id
             created = service.create_model(asset)
         elif isinstance(asset, CompositionAsset):
+            asset.owner = current_user.id
             created = service.create_composition(asset)
         else:
             raise HTTPException(
