@@ -15,17 +15,6 @@ Mellea Playground provides a web interface for:
 
 It's designed for builders who want to experiment with multi-model orchestration without managing infrastructure manually.
 
-## Project Structure
-
-```
-mellea-playground/
-├── backend/          # Python/FastAPI API server
-├── frontend/         # React/TypeScript web UI
-├── k8s/              # Kubernetes manifests (kind cluster)
-├── scripts/          # Development and deployment scripts
-└── spec/             # Design specifications
-```
-
 ## Quick Start
 
 ```bash
