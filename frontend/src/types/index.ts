@@ -63,6 +63,77 @@ export interface AssetMetadata {
   lastRunAt?: string;
 }
 
+// Program types
+export type ImageBuildStatus = 'pending' | 'building' | 'ready' | 'failed';
+
+export interface ResourceProfile {
+  cpuLimit: string;
+  memoryLimit: string;
+  timeoutSeconds: number;
+}
+
+export interface ProgramDependencies {
+  source: 'pyproject' | 'requirements' | 'manual';
+  packages: { name: string; version?: string }[];
+  pythonVersion?: string;
+}
+
+export interface ProgramAsset extends AssetMetadata {
+  type: 'program';
+  entrypoint: string;
+  sourceCode?: string;
+  dependencies?: ProgramDependencies;
+  resourceProfile?: ResourceProfile;
+  imageTag?: string;
+  imageBuildStatus?: ImageBuildStatus;
+  imageBuildError?: string;
+}
+
+// Run types
+export type RunExecutionStatus =
+  | 'queued'
+  | 'starting'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
+export interface RunMetrics {
+  queueDurationMs?: number;
+  startupDurationMs?: number;
+  executionDurationMs?: number;
+  totalDurationMs?: number;
+}
+
+export interface Run {
+  id: string;
+  programId: string;
+  environmentId?: string;
+  status: RunExecutionStatus;
+  jobName?: string;
+  exitCode?: number;
+  errorMessage?: string;
+  output?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  metrics?: RunMetrics;
+}
+
+// Create request types
+export interface CreateProgramRequest {
+  type: 'program';
+  name: string;
+  description?: string;
+  entrypoint: string;
+  sourceCode: string;
+  tags?: string[];
+}
+
+export interface CreateRunRequest {
+  programId: string;
+}
+
 // API response types
 export interface ApiError {
   detail: string;

@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ChakraProvider, extendTheme } from '@chakra-ui/react';
 import { AuthProvider } from '@/contexts';
 import { MainLayout, ProtectedRoute } from '@/components';
-import { LoginPage, RegisterPage, DashboardPage } from '@/pages';
+import { LoginPage, RegisterPage, DashboardPage, ProgramsPage, ProgramDetailPage } from '@/pages';
 
 // Extend the default Chakra theme
 const theme = extendTheme({
@@ -62,7 +62,8 @@ export function App() {
               }
             >
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/programs" element={<PlaceholderPage title="Programs" />} />
+              <Route path="/programs" element={<ProgramsPage />} />
+              <Route path="/programs/:id" element={<ProgramDetailPage />} />
               <Route path="/models" element={<PlaceholderPage title="Models" />} />
               <Route path="/compositions" element={<PlaceholderPage title="Compositions" />} />
               <Route path="/runs" element={<PlaceholderPage title="Runs" />} />

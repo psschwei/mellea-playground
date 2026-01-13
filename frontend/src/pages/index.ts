@@ -1,3 +1,5 @@
 export { LoginPage } from './Login';
 export { RegisterPage } from './Register';
 export { DashboardPage } from './Dashboard';
+export { ProgramsPage } from './Programs';
+export { ProgramDetailPage } from './ProgramDetail';
