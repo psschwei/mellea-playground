@@ -16,7 +16,11 @@ def generate_uuid() -> str:
 # Valid state transitions for run execution
 VALID_RUN_TRANSITIONS: dict[RunExecutionStatus, set[RunExecutionStatus]] = {
     RunExecutionStatus.QUEUED: {RunExecutionStatus.STARTING, RunExecutionStatus.CANCELLED},
-    RunExecutionStatus.STARTING: {RunExecutionStatus.RUNNING, RunExecutionStatus.FAILED},
+    RunExecutionStatus.STARTING: {
+        RunExecutionStatus.RUNNING,
+        RunExecutionStatus.FAILED,
+        RunExecutionStatus.CANCELLED,
+    },
     RunExecutionStatus.RUNNING: {
         RunExecutionStatus.SUCCEEDED,
         RunExecutionStatus.FAILED,
