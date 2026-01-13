@@ -136,8 +136,8 @@ class RunService:
             The created Run in QUEUED status
         """
         run = Run(
-            environment_id=environment_id,
-            program_id=program_id,
+            environmentId=environment_id,
+            programId=program_id,
             status=RunExecutionStatus.QUEUED,
         )
         created = self.run_store.create(run)
