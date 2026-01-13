@@ -13,6 +13,12 @@ from mellea_api.models.assets import (
     SlotMetadata,
     SlotSignature,
 )
+from mellea_api.models.build import (
+    BuildContext,
+    BuildResult,
+    BuildStage,
+    LayerCacheEntry,
+)
 from mellea_api.models.common import ModelProvider, ModelScope, RunStatus, SharingMode
 from mellea_api.models.user import (
     AuthConfig,
@@ -31,8 +37,12 @@ __all__ = [
     "AssetMetadata",
     "AuthConfig",
     "AuthProvider",
+    "BuildContext",
+    "BuildResult",
+    "BuildStage",
     "CompositionAsset",
     "DependencySpec",
+    "LayerCacheEntry",
     "ModelAsset",
     "ModelParams",
     "ModelProvider",
