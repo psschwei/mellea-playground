@@ -1,6 +1,6 @@
 # Mellea Playground Makefile
-.PHONY: help cluster-up cluster-down cluster-status build load redis-cli clean \
-        ci-check lint test setup-hooks
+.PHONY: help cluster-up cluster-down cluster-status build load deploy redis-cli clean \
+        ci-check lint test setup-hooks spin-up-from-scratch
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -44,6 +44,10 @@ build-all: ## Build all Docker images
 load: ## Load a Docker image into kind (usage: make load IMAGE=myimage:tag)
 	./scripts/load-image.sh $(IMAGE)
 
+# Deployment
+deploy: ## Deploy all resources to the cluster
+	kubectl apply -k k8s/
+
 # Development helpers
 redis-cli: ## Open Redis CLI
 	kubectl exec -it -n mellea-system deployment/redis -- redis-cli
@@ -56,3 +60,6 @@ clean: ## Remove data directories (preserves cluster)
 	rm -rf data/
 
 clean-all: cluster-down clean ## Delete cluster and all data
+
+# Full setup
+spin-up-from-scratch: cluster-up build-all deploy ## Create cluster, build images, and deploy everything
