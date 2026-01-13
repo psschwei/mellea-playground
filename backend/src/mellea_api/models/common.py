@@ -96,3 +96,24 @@ class EnvironmentStatus(str, Enum):
     STOPPED = "stopped"  # Container stopped
     FAILED = "failed"  # Build or runtime failure
     DELETING = "deleting"  # Being cleaned up
+
+
+class RunExecutionStatus(str, Enum):
+    """Status of a program run execution.
+
+    State machine transitions:
+        QUEUED -> STARTING (job creation started)
+        QUEUED -> CANCELLED (user cancelled before start)
+        STARTING -> RUNNING (K8s job started)
+        STARTING -> FAILED (job creation failed)
+        RUNNING -> SUCCEEDED (exit code 0)
+        RUNNING -> FAILED (exit code != 0 or timeout)
+        RUNNING -> CANCELLED (user cancelled during execution)
+    """
+
+    QUEUED = "queued"  # Initial state, waiting to start
+    STARTING = "starting"  # K8s Job being created
+    RUNNING = "running"  # Job is executing
+    SUCCEEDED = "succeeded"  # Completed successfully (exit code 0)
+    FAILED = "failed"  # Completed with error
+    CANCELLED = "cancelled"  # User cancelled
