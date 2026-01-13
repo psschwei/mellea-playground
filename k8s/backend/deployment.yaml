@@ -22,6 +22,19 @@ spec:
         app.kubernetes.io/name: mellea-api
     spec:
       serviceAccountName: default
+      initContainers:
+        - name: init-permissions
+          image: busybox:1.36
+          command: ['sh', '-c', 'chown -R 999:999 /app/data/metadata /app/data/workspaces /app/data/artifacts']
+          volumeMounts:
+            - name: assets
+              mountPath: /app/data/metadata
+            - name: workspaces
+              mountPath: /app/data/workspaces
+            - name: artifacts
+              mountPath: /app/data/artifacts
+          securityContext:
+            runAsUser: 0
       containers:
         - name: api
           image: mellea-backend:latest
