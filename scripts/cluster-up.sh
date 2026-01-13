@@ -45,15 +45,6 @@ kubectl apply -f k8s/storage/storage-class.yaml
 kubectl apply -f k8s/storage/persistent-volumes.yaml
 kubectl apply -f k8s/storage/persistent-volume-claims.yaml
 
-# Deploy Redis
-echo "==> Deploying Redis..."
-kubectl apply -f k8s/redis/redis-config.yaml
-kubectl apply -f k8s/redis/redis-deployment.yaml
-
-# Wait for Redis to be ready
-echo "==> Waiting for Redis to be ready..."
-kubectl wait --for=condition=Available deployment/redis -n mellea-system --timeout=120s
-
 echo ""
 echo "==> Cluster '$CLUSTER_NAME' is ready!"
 echo ""
