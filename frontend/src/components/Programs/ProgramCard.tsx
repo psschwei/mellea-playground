@@ -17,6 +17,7 @@ import type { ProgramAsset } from '@/types';
 interface ProgramCardProps {
   program: ProgramAsset;
   onRun?: (program: ProgramAsset) => void;
+  isBuilding?: boolean;
   isRunning?: boolean;
 }
 
@@ -35,7 +36,7 @@ function formatRelativeTime(dateString?: string): string {
   return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 }
 
-export function ProgramCard({ program, onRun, isRunning = false }: ProgramCardProps) {
+export function ProgramCard({ program, onRun, isBuilding = false, isRunning = false }: ProgramCardProps) {
   const navigate = useNavigate();
   const bgHover = useColorModeValue('gray.50', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -93,8 +94,8 @@ export function ProgramCard({ program, onRun, isRunning = false }: ProgramCardPr
               size="sm"
               colorScheme="brand"
               leftIcon={<FiPlay />}
-              isLoading={isRunning}
-              loadingText="Running"
+              isLoading={isBuilding || isRunning}
+              loadingText={isBuilding ? 'Building' : 'Running'}
               onClick={() => onRun?.(program)}
             >
               Run

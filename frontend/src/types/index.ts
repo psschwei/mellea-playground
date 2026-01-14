@@ -134,6 +134,22 @@ export interface CreateRunRequest {
   programId: string;
 }
 
+export interface BuildImageRequest {
+  forceRebuild?: boolean;
+  push?: boolean;
+}
+
+export interface BuildResult {
+  programId: string;
+  success: boolean;
+  imageTag?: string;
+  cacheHit: boolean;
+  errorMessage?: string;
+  totalDurationSeconds: number;
+  depsBuildDurationSeconds?: number;
+  programBuildDurationSeconds?: number;
+}
+
 // API response types
 export interface ApiError {
   detail: string;

@@ -51,6 +51,7 @@ export function ProgramDetailPage() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [currentRun, setCurrentRun] = useState<Run | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isBuilding, setIsBuilding] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
 
   const loadProgram = useCallback(async () => {
@@ -90,6 +91,62 @@ export function ProgramDetailPage() {
   const handleRun = async () => {
     if (!program) return;
 
+    // Check if image needs to be built first
+    if (!program.imageTag || program.imageBuildStatus !== 'ready') {
+      setIsBuilding(true);
+      try {
+        toast({
+          title: 'Building image...',
+          description: 'This may take a minute',
+          status: 'info',
+          duration: null,
+          isClosable: true,
+          id: 'build-toast',
+        });
+
+        const buildResult = await programsApi.build(program.id);
+
+        toast.close('build-toast');
+
+        if (!buildResult.success) {
+          toast({
+            title: 'Build failed',
+            description: buildResult.errorMessage || 'Unknown error',
+            status: 'error',
+            duration: 5000,
+          });
+          setIsBuilding(false);
+          return;
+        }
+
+        toast({
+          title: 'Build succeeded',
+          description: buildResult.cacheHit
+            ? 'Used cached image'
+            : `Built in ${buildResult.totalDurationSeconds.toFixed(1)}s`,
+          status: 'success',
+          duration: 3000,
+        });
+
+        // Reload program to get updated imageTag
+        await loadProgram();
+      } catch (error: unknown) {
+        toast.close('build-toast');
+        const message = error instanceof Error ? error.message : 'Failed to build image';
+        toast({
+          title: 'Build error',
+          description: message,
+          status: 'error',
+          duration: 5000,
+        });
+        setIsBuilding(false);
+        return;
+      } finally {
+        setIsBuilding(false);
+      }
+    }
+
+    // Now run the program
     setIsRunning(true);
     try {
       const run = await runsApi.create({ programId: program.id });
@@ -205,8 +262,8 @@ export function ProgramDetailPage() {
           colorScheme="brand"
           leftIcon={<FiPlay />}
           onClick={handleRun}
-          isLoading={isRunning}
-          loadingText="Running..."
+          isLoading={isBuilding || isRunning}
+          loadingText={isBuilding ? 'Building...' : 'Running...'}
         >
           Run
         </Button>
@@ -261,7 +318,13 @@ export function ProgramDetailPage() {
                 <VStack spacing={2}>
                   <FiClock size={32} color="gray" />
                   <Text color="gray.500">No runs yet</Text>
-                  <Button size="sm" colorScheme="brand" onClick={handleRun}>
+                  <Button
+                    size="sm"
+                    colorScheme="brand"
+                    onClick={handleRun}
+                    isLoading={isBuilding || isRunning}
+                    loadingText={isBuilding ? 'Building...' : 'Running...'}
+                  >
                     Run now
                   </Button>
                 </VStack>

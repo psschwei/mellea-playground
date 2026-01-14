@@ -20,6 +20,7 @@ import type { ProgramAsset } from '@/types';
 export function ProgramsPage() {
   const [programs, setPrograms] = useState<ProgramAsset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [buildingProgramId, setBuildingProgramId] = useState<string | null>(null);
   const [runningProgramId, setRunningProgramId] = useState<string | null>(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
@@ -44,6 +45,62 @@ export function ProgramsPage() {
   };
 
   const handleRunProgram = async (program: ProgramAsset) => {
+    // Check if image needs to be built first
+    if (!program.imageTag || program.imageBuildStatus !== 'ready') {
+      setBuildingProgramId(program.id);
+      try {
+        toast({
+          title: 'Building image...',
+          description: 'This may take a minute',
+          status: 'info',
+          duration: null,
+          isClosable: true,
+          id: `build-toast-${program.id}`,
+        });
+
+        const buildResult = await programsApi.build(program.id);
+
+        toast.close(`build-toast-${program.id}`);
+
+        if (!buildResult.success) {
+          toast({
+            title: 'Build failed',
+            description: buildResult.errorMessage || 'Unknown error',
+            status: 'error',
+            duration: 5000,
+          });
+          setBuildingProgramId(null);
+          return;
+        }
+
+        toast({
+          title: 'Build succeeded',
+          description: buildResult.cacheHit
+            ? 'Used cached image'
+            : `Built in ${buildResult.totalDurationSeconds.toFixed(1)}s`,
+          status: 'success',
+          duration: 3000,
+        });
+
+        // Reload programs to get updated imageTag
+        await loadPrograms();
+      } catch (error: unknown) {
+        toast.close(`build-toast-${program.id}`);
+        const message = error instanceof Error ? error.message : 'Failed to build image';
+        toast({
+          title: 'Build error',
+          description: message,
+          status: 'error',
+          duration: 5000,
+        });
+        setBuildingProgramId(null);
+        return;
+      } finally {
+        setBuildingProgramId(null);
+      }
+    }
+
+    // Now run the program
     setRunningProgramId(program.id);
     try {
       const run = await runsApi.create({ programId: program.id });
@@ -132,6 +189,7 @@ export function ProgramsPage() {
               key={program.id}
               program={program}
               onRun={handleRunProgram}
+              isBuilding={buildingProgramId === program.id}
               isRunning={runningProgramId === program.id}
             />
           ))}

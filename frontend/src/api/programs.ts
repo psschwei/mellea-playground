@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { ProgramAsset, CreateProgramRequest } from '@/types';
+import type { ProgramAsset, CreateProgramRequest, BuildImageRequest, BuildResult } from '@/types';
 
 export const programsApi = {
   /**
@@ -40,5 +40,13 @@ export const programsApi = {
    */
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/assets/${id}`);
+  },
+
+  /**
+   * Build a container image for a program
+   */
+  build: async (id: string, options?: BuildImageRequest): Promise<BuildResult> => {
+    const response = await apiClient.post<{ result: BuildResult }>(`/assets/${id}/build`, options);
+    return response.data.result;
   },
 };
