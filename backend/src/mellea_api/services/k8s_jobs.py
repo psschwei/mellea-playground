@@ -30,6 +30,7 @@ DEFAULT_BACKOFF_LIMIT = 0  # No retries
 DEFAULT_USER_ID = 1000
 DEFAULT_GROUP_ID = 1000
 RUN_SERVICE_ACCOUNT = "mellea-run"
+DEFAULT_TERMINATION_GRACE_PERIOD = 30  # Seconds to wait for graceful shutdown
 
 
 class K8sJobService:
@@ -203,6 +204,7 @@ class K8sJobService:
         pod_spec = client.V1PodSpec(
             restart_policy="Never",
             service_account_name=service_account,
+            termination_grace_period_seconds=DEFAULT_TERMINATION_GRACE_PERIOD,
             security_context=client.V1PodSecurityContext(
                 run_as_non_root=True,
                 run_as_user=DEFAULT_USER_ID,
@@ -374,6 +376,7 @@ class K8sJobService:
         job_name: str,
         namespace: str = RUNS_NAMESPACE,
         propagation_policy: str = "Background",
+        grace_period_seconds: int | None = None,
     ) -> None:
         """Delete a Kubernetes Job and its pods.
 
@@ -384,22 +387,73 @@ class K8sJobService:
                 - "Background": Delete job, pods cleaned up async
                 - "Foreground": Wait for pods to be deleted
                 - "Orphan": Delete job, leave pods
+            grace_period_seconds: Time to wait for graceful termination.
+                If None, uses pod's terminationGracePeriodSeconds.
+                If 0, forces immediate termination (SIGKILL).
 
         Raises:
             RuntimeError: If deletion fails
         """
         try:
+            delete_options = client.V1DeleteOptions(
+                propagation_policy=propagation_policy,
+                grace_period_seconds=grace_period_seconds,
+            )
             self.batch_api.delete_namespaced_job(
                 name=job_name,
                 namespace=namespace,
-                body=client.V1DeleteOptions(propagation_policy=propagation_policy),
+                body=delete_options,
             )
-            logger.info("Deleted job %s from namespace %s", job_name, namespace)
+            logger.info(
+                "Deleted job %s from namespace %s (grace_period=%s)",
+                job_name,
+                namespace,
+                grace_period_seconds,
+            )
         except ApiException as e:
             if e.status == 404:
                 logger.warning("Job %s not found, already deleted?", job_name)
                 return
             raise RuntimeError(f"Failed to delete job: {e.reason}") from e
+
+    def cancel_job(
+        self,
+        job_name: str,
+        namespace: str = RUNS_NAMESPACE,
+        force: bool = False,
+    ) -> None:
+        """Cancel a running Kubernetes Job with graceful shutdown.
+
+        This method sends SIGTERM to allow the process to clean up,
+        waits for the termination grace period, then sends SIGKILL.
+
+        Args:
+            job_name: Name of the job to cancel
+            namespace: Kubernetes namespace
+            force: If True, immediately terminates without grace period (SIGKILL).
+                   If False, allows graceful shutdown with SIGTERM first.
+
+        Raises:
+            RuntimeError: If cancellation fails
+        """
+        if force:
+            # Immediate termination - skip grace period
+            logger.info("Force cancelling job %s (immediate termination)", job_name)
+            self.delete_job(
+                job_name,
+                namespace=namespace,
+                propagation_policy="Foreground",
+                grace_period_seconds=0,
+            )
+        else:
+            # Graceful shutdown - let K8s use the pod's terminationGracePeriodSeconds
+            logger.info("Gracefully cancelling job %s", job_name)
+            self.delete_job(
+                job_name,
+                namespace=namespace,
+                propagation_policy="Foreground",
+                grace_period_seconds=None,  # Use pod's configured grace period
+            )
 
     def list_jobs(
         self,

@@ -505,16 +505,16 @@ class TestSyncRunStatus:
 
 
 class TestCancelRun:
-    """Tests for cancelling runs."""
+    """Tests for cancelling runs with graceful shutdown."""
 
-    def test_cancel_run_with_job(
+    def test_cancel_run_graceful_default(
         self,
         run_executor: RunExecutor,
         run_service: RunService,
         sample_environment: Environment,
         mock_k8s_service,
     ):
-        """Test cancelling a running run with a K8s job."""
+        """Test graceful cancellation (default) sends SIGTERM with grace period."""
         # Create and start a run
         run = run_service.create_run(
             environment_id=sample_environment.id,
@@ -523,11 +523,35 @@ class TestCancelRun:
         run = run_service.start_run(run.id, "test-job")
         run = run_service.mark_running(run.id)
 
-        # Cancel
+        # Cancel with default (graceful)
         cancelled = run_executor.cancel_run(run.id)
 
         assert cancelled.status == RunExecutionStatus.CANCELLED
-        mock_k8s_service.delete_job.assert_called_once_with("test-job")
+        # Should call cancel_job with force=False for graceful shutdown
+        mock_k8s_service.cancel_job.assert_called_once_with("test-job", force=False)
+
+    def test_cancel_run_force(
+        self,
+        run_executor: RunExecutor,
+        run_service: RunService,
+        sample_environment: Environment,
+        mock_k8s_service,
+    ):
+        """Test force cancellation immediately terminates without grace period."""
+        # Create and start a run
+        run = run_service.create_run(
+            environment_id=sample_environment.id,
+            program_id="prog-123",
+        )
+        run = run_service.start_run(run.id, "test-job")
+        run = run_service.mark_running(run.id)
+
+        # Force cancel
+        cancelled = run_executor.cancel_run(run.id, force=True)
+
+        assert cancelled.status == RunExecutionStatus.CANCELLED
+        # Should call cancel_job with force=True for immediate termination
+        mock_k8s_service.cancel_job.assert_called_once_with("test-job", force=True)
 
     def test_cancel_run_no_job(
         self,
@@ -545,16 +569,16 @@ class TestCancelRun:
         cancelled = run_executor.cancel_run(run.id)
 
         assert cancelled.status == RunExecutionStatus.CANCELLED
-        mock_k8s_service.delete_job.assert_not_called()
+        mock_k8s_service.cancel_job.assert_not_called()
 
-    def test_cancel_run_k8s_delete_failure(
+    def test_cancel_run_k8s_failure(
         self,
         run_executor: RunExecutor,
         run_service: RunService,
         sample_environment: Environment,
         mock_k8s_service,
     ):
-        """Test cancelling when K8s job deletion fails (should still cancel run)."""
+        """Test cancelling when K8s job cancellation fails (should still cancel run)."""
         run = run_service.create_run(
             environment_id=sample_environment.id,
             program_id="prog-123",
@@ -562,7 +586,7 @@ class TestCancelRun:
         run = run_service.start_run(run.id, "test-job")
 
         # Configure K8s to fail
-        mock_k8s_service.delete_job.side_effect = RuntimeError("Delete failed")
+        mock_k8s_service.cancel_job.side_effect = RuntimeError("Cancel failed")
 
         # Should still cancel the run
         cancelled = run_executor.cancel_run(run.id)
@@ -786,11 +810,11 @@ class TestFullLifecycle:
         run = run_executor.sync_run_status(run.id)
         assert run.status == RunExecutionStatus.RUNNING
 
-        # User cancels
+        # User cancels (graceful by default)
         run = run_executor.cancel_run(run.id)
 
         assert run.status == RunExecutionStatus.CANCELLED
-        mock_k8s_service.delete_job.assert_called_once()
+        mock_k8s_service.cancel_job.assert_called_once()
 
     def test_startup_failure_lifecycle(
         self,

@@ -20,8 +20,10 @@ from mellea_api.services.run import (
     RunService,
     get_run_service,
 )
+from mellea_api.services.run_executor import RunExecutor, get_run_executor
 
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
+RunExecutorDep = Annotated[RunExecutor, Depends(get_run_executor)]
 EnvironmentServiceDep = Annotated[EnvironmentService, Depends(get_environment_service)]
 AssetServiceDep = Annotated[AssetService, Depends(get_asset_service)]
 CredentialServiceDep = Annotated[CredentialService, Depends(get_credential_service)]
@@ -54,6 +56,19 @@ class RunsListResponse(BaseModel):
 
     runs: list[Run]
     total: int
+
+
+class CancelRunRequest(BaseModel):
+    """Request body for cancelling a run."""
+
+    force: bool = Field(
+        default=False,
+        description=(
+            "If True, immediately terminates without grace period (SIGKILL). "
+            "If False (default), allows graceful shutdown with SIGTERM first, "
+            "waiting up to 30 seconds for the process to clean up."
+        ),
+    )
 
 
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
@@ -178,16 +193,23 @@ async def get_run(
 async def cancel_run(
     run_id: str,
     current_user: CurrentUser,
-    run_service: RunServiceDep,
+    run_executor: RunExecutorDep,
+    request: CancelRunRequest | None = None,
 ) -> RunResponse:
-    """Cancel a run.
+    """Cancel a run with graceful shutdown.
+
+    By default, sends SIGTERM to allow the process to clean up gracefully,
+    waiting up to 30 seconds before forcefully terminating.
 
     Can only cancel runs that are in QUEUED or RUNNING status.
-    Cancellation is asynchronous - the run may take some time to
-    actually stop.
+
+    Args:
+        force: If True, immediately terminates without grace period (SIGKILL).
+               If False (default), allows graceful shutdown with SIGTERM first.
     """
+    force = request.force if request else False
     try:
-        run = run_service.cancel_run(run_id)
+        run = run_executor.cancel_run(run_id, force=force)
         return RunResponse(run=run)
     except RunNotFoundError as e:
         raise HTTPException(

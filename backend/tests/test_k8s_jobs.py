@@ -10,6 +10,7 @@ from mellea_api.models.environment import ResourceLimits
 from mellea_api.models.k8s import JobInfo, JobStatus
 from mellea_api.services.k8s_jobs import (
     DEFAULT_BACKOFF_LIMIT,
+    DEFAULT_TERMINATION_GRACE_PERIOD,
     DEFAULT_TTL_SECONDS,
     DEFAULT_USER_ID,
     RUNS_NAMESPACE,
@@ -160,6 +161,21 @@ class TestBuildRunJobSpec:
         container = job.spec.template.spec.containers[0]
         assert container.command == ["python", "scripts/run_analysis.py"]
 
+    def test_build_run_job_spec_termination_grace_period(self, k8s_service: K8sJobService):
+        """Test that termination grace period is set for graceful shutdown."""
+        limits = ResourceLimits()
+        job = k8s_service._build_run_job_spec(
+            job_name="test-job",
+            environment_id="env-123",
+            image_tag="test:latest",
+            resource_limits=limits,
+            entrypoint="main.py",
+        )
+
+        # Check that termination grace period is set on pod spec
+        pod_spec = job.spec.template.spec
+        assert pod_spec.termination_grace_period_seconds == DEFAULT_TERMINATION_GRACE_PERIOD
+
 
 class TestCreateRunJob:
     """Tests for creating run jobs."""
@@ -277,6 +293,67 @@ class TestDeleteJob:
         call_args = mock_batch_api.delete_namespaced_job.call_args
         assert call_args.kwargs["name"] == "test-job"
         assert call_args.kwargs["namespace"] == RUNS_NAMESPACE
+
+    def test_delete_job_with_grace_period(self, k8s_service: K8sJobService, mock_batch_api):
+        """Test job deletion with custom grace period."""
+        mock_batch_api.delete_namespaced_job.return_value = MagicMock()
+
+        k8s_service.delete_job("test-job", RUNS_NAMESPACE, grace_period_seconds=60)
+
+        call_args = mock_batch_api.delete_namespaced_job.call_args
+        delete_options = call_args.kwargs["body"]
+        assert delete_options.grace_period_seconds == 60
+
+    def test_delete_job_immediate(self, k8s_service: K8sJobService, mock_batch_api):
+        """Test immediate job deletion (grace_period_seconds=0)."""
+        mock_batch_api.delete_namespaced_job.return_value = MagicMock()
+
+        k8s_service.delete_job("test-job", RUNS_NAMESPACE, grace_period_seconds=0)
+
+        call_args = mock_batch_api.delete_namespaced_job.call_args
+        delete_options = call_args.kwargs["body"]
+        assert delete_options.grace_period_seconds == 0
+
+
+class TestCancelJob:
+    """Tests for cancelling jobs with graceful shutdown."""
+
+    def test_cancel_job_graceful(self, k8s_service: K8sJobService, mock_batch_api):
+        """Test graceful job cancellation uses Foreground propagation and default grace period."""
+        mock_batch_api.delete_namespaced_job.return_value = MagicMock()
+
+        k8s_service.cancel_job("test-job", RUNS_NAMESPACE, force=False)
+
+        mock_batch_api.delete_namespaced_job.assert_called_once()
+        call_args = mock_batch_api.delete_namespaced_job.call_args
+        delete_options = call_args.kwargs["body"]
+        # Graceful uses Foreground propagation and pod's configured grace period
+        assert delete_options.propagation_policy == "Foreground"
+        assert delete_options.grace_period_seconds is None
+
+    def test_cancel_job_force(self, k8s_service: K8sJobService, mock_batch_api):
+        """Test forced job cancellation uses immediate termination."""
+        mock_batch_api.delete_namespaced_job.return_value = MagicMock()
+
+        k8s_service.cancel_job("test-job", RUNS_NAMESPACE, force=True)
+
+        mock_batch_api.delete_namespaced_job.assert_called_once()
+        call_args = mock_batch_api.delete_namespaced_job.call_args
+        delete_options = call_args.kwargs["body"]
+        # Force uses immediate termination (grace_period_seconds=0)
+        assert delete_options.propagation_policy == "Foreground"
+        assert delete_options.grace_period_seconds == 0
+
+    def test_cancel_job_default_is_graceful(self, k8s_service: K8sJobService, mock_batch_api):
+        """Test that cancel_job defaults to graceful cancellation."""
+        mock_batch_api.delete_namespaced_job.return_value = MagicMock()
+
+        k8s_service.cancel_job("test-job")
+
+        call_args = mock_batch_api.delete_namespaced_job.call_args
+        delete_options = call_args.kwargs["body"]
+        # Default should be graceful (no immediate termination)
+        assert delete_options.grace_period_seconds is None
 
 
 class TestListJobs:

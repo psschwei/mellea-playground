@@ -277,11 +277,16 @@ class RunExecutor:
         # as the run is already in STARTING
         return run
 
-    def cancel_run(self, run_id: str) -> Run:
-        """Cancel a run and its K8s job.
+    def cancel_run(self, run_id: str, force: bool = False) -> Run:
+        """Cancel a run and its K8s job with graceful shutdown.
+
+        By default, sends SIGTERM to allow the process to clean up gracefully,
+        waiting for the termination grace period (30s) before SIGKILL.
 
         Args:
             run_id: ID of the run to cancel
+            force: If True, immediately terminates without grace period (SIGKILL).
+                   If False (default), allows graceful shutdown with SIGTERM first.
 
         Returns:
             Updated Run in CANCELLED status
@@ -293,14 +298,23 @@ class RunExecutor:
         if run is None:
             raise RunNotFoundError(f"Run not found: {run_id}")
 
-        # Delete K8s job if it exists
+        # Cancel K8s job if it exists
         if run.job_name is not None:
             try:
-                self.k8s_service.delete_job(run.job_name)
-                logger.info("Deleted K8s job %s for run %s", run.job_name, run_id)
+                self.k8s_service.cancel_job(run.job_name, force=force)
+                if force:
+                    logger.info(
+                        "Force cancelled K8s job %s for run %s", run.job_name, run_id
+                    )
+                else:
+                    logger.info(
+                        "Gracefully cancelled K8s job %s for run %s",
+                        run.job_name,
+                        run_id,
+                    )
             except RuntimeError as e:
                 logger.warning(
-                    "Failed to delete K8s job %s for run %s: %s",
+                    "Failed to cancel K8s job %s for run %s: %s",
                     run.job_name,
                     run_id,
                     e,
