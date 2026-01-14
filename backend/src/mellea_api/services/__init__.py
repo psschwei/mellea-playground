@@ -30,6 +30,11 @@ from mellea_api.services.idle_timeout import (
     get_idle_timeout_controller,
     get_idle_timeout_service,
 )
+from mellea_api.services.kaniko_builder import (
+    KanikoBuildService,
+    get_kaniko_build_service,
+    reset_kaniko_build_service,
+)
 from mellea_api.services.warmup import (
     WarmupController,
     WarmupService,
@@ -58,6 +63,10 @@ __all__ = [
     "EnvironmentBuilderService",
     "get_environment_builder_service",
     "ImageBuildError",
+    # Kaniko build service
+    "KanikoBuildService",
+    "get_kaniko_build_service",
+    "reset_kaniko_build_service",
     # Idle timeout service
     "IdleTimeoutService",
     "get_idle_timeout_service",

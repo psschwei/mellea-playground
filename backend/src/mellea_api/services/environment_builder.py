@@ -505,6 +505,112 @@ CMD ["python", "{program.entrypoint}"]
     # Build Operations
     # -------------------------------------------------------------------------
 
+    def _build_with_kaniko(
+        self,
+        program: ProgramAsset,
+        workspace_path: Path,
+    ) -> BuildResult:
+        """Build a Docker image using Kaniko in Kubernetes.
+
+        This creates a Kubernetes Job that runs Kaniko to build the image
+        in-cluster without requiring a Docker daemon.
+
+        Args:
+            program: The program to build an image for
+            workspace_path: Path to the program's workspace directory
+
+        Returns:
+            BuildResult with job info (build runs asynchronously)
+        """
+        from mellea_api.services.kaniko_builder import get_kaniko_build_service
+
+        kaniko_service = get_kaniko_build_service()
+
+        # Generate the combined Dockerfile (deps + program in one)
+        dockerfile_content = self._generate_kaniko_dockerfile(program)
+
+        # Read workspace files for build context
+        context_files: dict[str, str] = {}
+        if workspace_path.exists():
+            for file_path in workspace_path.rglob("*"):
+                if file_path.is_file():
+                    relative_path = file_path.relative_to(workspace_path)
+                    # Skip hidden files and __pycache__
+                    if not any(part.startswith(".") or part == "__pycache__"
+                               for part in relative_path.parts):
+                        try:
+                            context_files[str(relative_path)] = file_path.read_text()
+                        except UnicodeDecodeError:
+                            # Skip binary files
+                            logger.debug(f"Skipping binary file: {relative_path}")
+
+        # Generate full image tag with registry
+        if self.settings.registry_url:
+            image_tag = f"{self.settings.registry_url}/{self.PROGRAM_IMAGE_PREFIX}:{program.id[:12]}"
+        else:
+            # For local Kind cluster, use localhost:5001
+            image_tag = f"localhost:5001/{self.PROGRAM_IMAGE_PREFIX}:{program.id[:12]}"
+
+        logger.info(f"Starting Kaniko build for {program.id} -> {image_tag}")
+
+        return kaniko_service.create_build_job(
+            program=program,
+            dockerfile_content=dockerfile_content,
+            context_files=context_files,
+            image_tag=image_tag,
+        )
+
+    def _generate_kaniko_dockerfile(self, program: ProgramAsset) -> str:
+        """Generate a single-stage Dockerfile for Kaniko builds.
+
+        Unlike the two-layer Docker approach, Kaniko builds use a single
+        Dockerfile that installs dependencies and copies source code.
+
+        Args:
+            program: The program to build
+
+        Returns:
+            Dockerfile content as string
+        """
+        py_version = program.dependencies.python_version or self.DEFAULT_PYTHON_VERSION
+        base_image = self.BASE_IMAGES.get(py_version, self.BASE_IMAGES[self.DEFAULT_PYTHON_VERSION])
+
+        # Generate requirements list
+        requirements_lines = []
+        for pkg in program.dependencies.packages:
+            line = pkg.name
+            if pkg.extras:
+                line += f"[{','.join(pkg.extras)}]"
+            if pkg.version:
+                line += f"=={pkg.version}"
+            requirements_lines.append(line)
+
+        requirements_content = "\\n".join(requirements_lines)
+
+        dockerfile = f"""# Mellea Program Image (Kaniko Build)
+# Program: {program.name} ({program.id})
+# Auto-generated - do not edit manually
+
+FROM {base_image}
+
+WORKDIR /app
+
+# Install dependencies
+RUN echo -e "{requirements_content}" > /tmp/requirements.txt && \\
+    pip install --no-cache-dir -r /tmp/requirements.txt && \\
+    rm /tmp/requirements.txt
+
+# Copy program source code
+COPY . /app/
+
+# Set entrypoint
+ENV MELLEA_ENTRYPOINT="{program.entrypoint}"
+
+# Default command runs the entrypoint
+CMD ["python", "{program.entrypoint}"]
+"""
+        return dockerfile
+
     def build_image(
         self,
         program: ProgramAsset,
@@ -515,6 +621,7 @@ CMD ["python", "{program.entrypoint}"]
         """Build a Docker image for a program with layer caching.
 
         This is the main entry point for building program images.
+        Routes to either Docker or Kaniko backend based on settings.
 
         Args:
             program: The program to build an image for
@@ -525,6 +632,11 @@ CMD ["python", "{program.entrypoint}"]
         Returns:
             BuildResult with success status and details
         """
+        # Route to Kaniko backend if configured
+        if self.settings.build_backend == "kaniko":
+            return self._build_with_kaniko(program, workspace_path)
+
+        # Use Docker backend (default)
         start_time = time.time()
         context = BuildContext(program_id=program.id)
 

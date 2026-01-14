@@ -81,3 +81,26 @@ class BuildResult(BaseModel):
     program_build_duration_seconds: float | None = Field(
         default=None, serialization_alias="programBuildDurationSeconds"
     )
+    # For async Kaniko builds
+    build_job_name: str | None = Field(default=None, serialization_alias="buildJobName")
+
+
+class BuildJobStatus(str, Enum):
+    """Status of a Kaniko build job."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class BuildJob(BaseModel):
+    """Represents a Kaniko build job in Kubernetes."""
+
+    job_name: str = Field(serialization_alias="jobName")
+    program_id: str = Field(serialization_alias="programId")
+    image_tag: str = Field(serialization_alias="imageTag")
+    status: BuildJobStatus
+    started_at: datetime | None = Field(default=None, serialization_alias="startedAt")
+    completed_at: datetime | None = Field(default=None, serialization_alias="completedAt")
+    error_message: str | None = Field(default=None, serialization_alias="errorMessage")

@@ -12,7 +12,7 @@ from mellea_api.models.assets import (
     ModelAsset,
     ProgramAsset,
 )
-from mellea_api.models.build import BuildResult
+from mellea_api.models.build import BuildJob, BuildJobStatus, BuildResult
 from mellea_api.models.common import DependencySource, ImageBuildStatus
 from mellea_api.services.assets import (
     AssetAlreadyExistsError,
@@ -20,6 +20,7 @@ from mellea_api.services.assets import (
     get_asset_service,
 )
 from mellea_api.services.environment_builder import get_environment_builder_service
+from mellea_api.services.kaniko_builder import get_kaniko_build_service
 
 AssetServiceDep = Annotated[AssetService, Depends(get_asset_service)]
 
@@ -76,6 +77,13 @@ class BuildImageResponse(BaseModel):
     """Response for build image operation."""
 
     result: BuildResult
+
+
+class BuildStatusResponse(BaseModel):
+    """Response for build status polling."""
+
+    build: BuildJob
+    logs: str | None = None
 
 
 class UpdateAssetRequest(BaseModel):
@@ -285,7 +293,16 @@ async def build_asset_image(
         push=push,
     )
 
-    # Update program with result
+    # Handle async Kaniko builds differently
+    if result.build_job_name:
+        # Kaniko build started - job runs asynchronously
+        # Keep status as BUILDING, update image_tag with expected value
+        program.image_tag = result.image_tag
+        # Status stays BUILDING until job completes
+        service.update_program(asset_id, program)
+        return BuildImageResponse(result=result)
+
+    # Synchronous Docker build - update program with final result
     if result.success:
         program.image_tag = result.image_tag
         program.image_build_status = ImageBuildStatus.READY
@@ -297,6 +314,68 @@ async def build_asset_image(
     service.update_program(asset_id, program)
 
     return BuildImageResponse(result=result)
+
+
+@router.get("/{asset_id}/build/status", response_model=BuildStatusResponse)
+async def get_build_status(
+    asset_id: str,
+    current_user: CurrentUser,
+    service: AssetServiceDep,
+    include_logs: bool = Query(default=False, alias="includeLogs"),
+) -> BuildStatusResponse:
+    """Get the status of an in-progress Kaniko build.
+
+    This endpoint is used to poll for build completion when using the
+    Kaniko build backend. For Docker builds, the build completes
+    synchronously and this endpoint is not needed.
+
+    Args:
+        asset_id: ID of the program asset being built
+        include_logs: Whether to include build logs in response
+
+    Returns:
+        Build status and optionally logs
+
+    Raises:
+        404: If the asset or build job is not found
+    """
+    # Get the program
+    program = service.get_program(asset_id)
+    if program is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Asset not found: {asset_id}",
+        )
+
+    # Generate the expected job name
+    job_name = f"mellea-build-{asset_id[:8].lower()}"
+
+    try:
+        kaniko_service = get_kaniko_build_service()
+        build = kaniko_service.get_build_status(job_name)
+
+        # Update program status if build completed
+        if build.status == BuildJobStatus.SUCCEEDED:
+            program.image_build_status = ImageBuildStatus.READY
+            program.image_build_error = None
+            service.update_program(asset_id, program)
+        elif build.status == BuildJobStatus.FAILED:
+            program.image_build_status = ImageBuildStatus.FAILED
+            program.image_build_error = build.error_message
+            service.update_program(asset_id, program)
+
+        # Get logs if requested
+        logs = None
+        if include_logs:
+            logs = kaniko_service.get_build_logs(job_name)
+
+        return BuildStatusResponse(build=build, logs=logs)
+
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
 
 
 @router.put("/{asset_id}", response_model=AssetResponse)

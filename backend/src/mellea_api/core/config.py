@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     registry_username: str | None = None
     registry_password: str | None = None
 
+    # Build Backend
+    build_backend: Literal["docker", "kaniko"] = "docker"
+    build_namespace: str = "mellea-builds"
+    kaniko_image: str = "gcr.io/kaniko-project/executor:v1.23.0"
+    build_timeout_seconds: int = 1800  # 30 minutes
+    build_cpu_limit: str = "2"
+    build_memory_limit: str = "2Gi"
+
     # Idle Timeout Controller
     idle_controller_enabled: bool = True
     idle_controller_interval_seconds: int = 300  # 5 minutes between checks

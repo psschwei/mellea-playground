@@ -10,6 +10,7 @@ resources:
 
   # RBAC (after namespaces)
   - rbac/run-service-account.yaml
+  - rbac/build-service-account.yaml
   - rbac/credential-reader-role.yaml
   - rbac/credential-reader-binding.yaml
 
