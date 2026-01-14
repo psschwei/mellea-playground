@@ -25,6 +25,12 @@ class ProgramNotFoundError(Exception):
     pass
 
 
+class CredentialValidationError(Exception):
+    """Raised when credential validation fails before run submission."""
+
+    pass
+
+
 # Mapping from K8s JobStatus to RunExecutionStatus
 JOB_STATUS_TO_RUN_STATUS: dict[JobStatus, RunExecutionStatus] = {
     JobStatus.PENDING: RunExecutionStatus.STARTING,
@@ -143,6 +149,18 @@ class RunExecutor:
             raise EnvironmentNotReadyError(
                 f"Environment {run.environment_id} has no image tag"
             )
+
+        # Validate all credentials before starting the run
+        for cred_id in run.credential_ids:
+            credential = self.credential_service.get_credential(cred_id)
+            if credential is None:
+                raise CredentialValidationError(
+                    f"Credential not found: {cred_id}"
+                )
+            if credential.is_expired:
+                raise CredentialValidationError(
+                    f"Credential has expired: {cred_id}"
+                )
 
         # Generate job name and transition to STARTING first
         # This allows proper state transition to FAILED if job creation fails

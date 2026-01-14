@@ -91,13 +91,18 @@ async def create_run(
             detail="Program does not have a built container image. Build the image first.",
         )
 
-    # Validate all credentials exist
+    # Validate all credentials exist and are not expired
     for cred_id in request.credential_ids:
         credential = credential_service.get_credential(cred_id)
         if credential is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Credential not found: {cred_id}",
+            )
+        if credential.is_expired:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Credential has expired: {cred_id}",
             )
 
     # Find or create an environment for this program

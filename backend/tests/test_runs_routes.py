@@ -3,6 +3,7 @@
 import os
 import tempfile
 from collections.abc import Iterator
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +14,7 @@ def client() -> Iterator[TestClient]:
     """Create a test client with fresh service state and temp directory."""
     import mellea_api.services.assets as assets_module
     import mellea_api.services.auth as auth_module
+    import mellea_api.services.credentials as cred_module
     import mellea_api.services.environment as env_module
     import mellea_api.services.run as run_module
     from mellea_api.core.config import get_settings
@@ -27,6 +29,7 @@ def client() -> Iterator[TestClient]:
         get_settings.cache_clear()
         auth_module._auth_service = None
         assets_module._asset_service = None
+        cred_module._credential_service = None
         env_module._environment_service = None
         run_module._run_service = None
 
@@ -53,6 +56,7 @@ def client() -> Iterator[TestClient]:
             get_settings.cache_clear()
             auth_module._auth_service = None
             assets_module._asset_service = None
+            cred_module._credential_service = None
             env_module._environment_service = None
             run_module._run_service = None
 
@@ -322,3 +326,113 @@ class TestCancelRun:
         data = response.json()
         assert data["run"]["id"] == run_id
         assert data["run"]["status"] == "cancelled"
+
+
+class TestCreateRunWithCredentials:
+    """Tests for credential validation when creating runs."""
+
+    def test_create_run_with_nonexistent_credential(
+        self, client: TestClient, auth_headers: dict[str, str], program_with_image: dict
+    ) -> None:
+        """Test creating a run with a non-existent credential returns 404."""
+        response = client.post(
+            "/api/v1/runs",
+            headers=auth_headers,
+            json={
+                "programId": program_with_image["id"],
+                "credentialIds": ["nonexistent-cred-id"],
+            },
+        )
+        assert response.status_code == 404
+        assert "credential" in response.json()["detail"].lower()
+
+    def test_create_run_with_expired_credential(
+        self, client: TestClient, auth_headers: dict[str, str], program_with_image: dict
+    ) -> None:
+        """Test creating a run with an expired credential returns 400."""
+        # Create an expired credential
+        expired_time = (datetime.utcnow() - timedelta(days=1)).isoformat()
+        cred_response = client.post(
+            "/api/v1/credentials",
+            headers=auth_headers,
+            json={
+                "name": "Expired API Key",
+                "type": "api_key",
+                "secretData": {"api_key": "test-key"},
+                "expiresAt": expired_time,
+            },
+        )
+        assert cred_response.status_code == 201
+        cred_id = cred_response.json()["id"]
+
+        # Try to create run with expired credential
+        response = client.post(
+            "/api/v1/runs",
+            headers=auth_headers,
+            json={
+                "programId": program_with_image["id"],
+                "credentialIds": [cred_id],
+            },
+        )
+        assert response.status_code == 400
+        assert "expired" in response.json()["detail"].lower()
+
+    def test_create_run_with_valid_credential(
+        self, client: TestClient, auth_headers: dict[str, str], program_with_image: dict
+    ) -> None:
+        """Test creating a run with a valid credential succeeds."""
+        # Create a valid credential (no expiration)
+        cred_response = client.post(
+            "/api/v1/credentials",
+            headers=auth_headers,
+            json={
+                "name": "Valid API Key",
+                "type": "api_key",
+                "secretData": {"api_key": "test-key"},
+            },
+        )
+        assert cred_response.status_code == 201
+        cred_id = cred_response.json()["id"]
+
+        # Create run with valid credential
+        response = client.post(
+            "/api/v1/runs",
+            headers=auth_headers,
+            json={
+                "programId": program_with_image["id"],
+                "credentialIds": [cred_id],
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["run"]["credentialIds"] == [cred_id]
+
+    def test_create_run_with_future_expiring_credential(
+        self, client: TestClient, auth_headers: dict[str, str], program_with_image: dict
+    ) -> None:
+        """Test creating a run with a credential that expires in the future succeeds."""
+        # Create a credential that expires tomorrow
+        future_time = (datetime.utcnow() + timedelta(days=1)).isoformat()
+        cred_response = client.post(
+            "/api/v1/credentials",
+            headers=auth_headers,
+            json={
+                "name": "Future Expiring Key",
+                "type": "api_key",
+                "secretData": {"api_key": "test-key"},
+                "expiresAt": future_time,
+            },
+        )
+        assert cred_response.status_code == 201
+        cred_id = cred_response.json()["id"]
+
+        # Create run with future-expiring credential
+        response = client.post(
+            "/api/v1/runs",
+            headers=auth_headers,
+            json={
+                "programId": program_with_image["id"],
+                "credentialIds": [cred_id],
+            },
+        )
+        assert response.status_code == 201
