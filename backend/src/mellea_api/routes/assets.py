@@ -358,13 +358,13 @@ async def update_asset(
             model.tags = update.tags
         if update.version is not None:
             model.version = update.version
-        updated = service.update_model(asset_id, model)
-        if updated is None:
+        updated_model = service.update_model(asset_id, model)
+        if updated_model is None:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to update asset",
             )
-        return AssetResponse(asset=updated)
+        return AssetResponse(asset=updated_model)
 
     composition = service.get_composition(asset_id)
     if composition is not None:
@@ -381,13 +381,13 @@ async def update_asset(
             composition.tags = update.tags
         if update.version is not None:
             composition.version = update.version
-        updated = service.update_composition(asset_id, composition)
-        if updated is None:
+        updated_composition = service.update_composition(asset_id, composition)
+        if updated_composition is None:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to update asset",
             )
-        return AssetResponse(asset=updated)
+        return AssetResponse(asset=updated_composition)
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
