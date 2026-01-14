@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   FiHome,
   FiCode,
+  FiKey,
   FiCpu,
   FiGitBranch,
   FiPlay,
@@ -67,6 +68,7 @@ export function Sidebar() {
       <VStack spacing={1} align="stretch" px={2}>
         <NavItem to="/dashboard" icon={FiHome} label="Dashboard" />
         <NavItem to="/programs" icon={FiCode} label="Programs" />
+        <NavItem to="/credentials" icon={FiKey} label="Credentials" />
         <NavItem to="/models" icon={FiCpu} label="Models" />
         <NavItem to="/compositions" icon={FiGitBranch} label="Compositions" />
         <NavItem to="/runs" icon={FiPlay} label="Runs" />

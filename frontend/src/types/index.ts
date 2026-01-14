@@ -150,6 +150,55 @@ export interface BuildResult {
   programBuildDurationSeconds?: number;
 }
 
+// Credential types
+export type CredentialType =
+  | 'api_key'
+  | 'registry'
+  | 'database'
+  | 'oauth_token'
+  | 'ssh_key'
+  | 'custom';
+
+export type ModelProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'ollama'
+  | 'azure'
+  | 'custom';
+
+export interface Credential {
+  id: string;
+  name: string;
+  description: string;
+  type: CredentialType;
+  provider?: ModelProvider | string;
+  ownerId?: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  lastAccessedAt?: string;
+  expiresAt?: string;
+  isExpired: boolean;
+}
+
+export interface CreateCredentialRequest {
+  name: string;
+  description?: string;
+  type: CredentialType;
+  provider?: ModelProvider | string;
+  secretData: Record<string, string>;
+  tags?: string[];
+  expiresAt?: string;
+}
+
+export interface UpdateCredentialRequest {
+  name?: string;
+  description?: string;
+  secretData?: Record<string, string>;
+  tags?: string[];
+  expiresAt?: string;
+}
+
 // API response types
 export interface ApiError {
   detail: string;
