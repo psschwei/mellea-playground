@@ -78,6 +78,25 @@ class BuildImageResponse(BaseModel):
     result: BuildResult
 
 
+class UpdateAssetRequest(BaseModel):
+    """Request model for updating asset metadata.
+
+    All fields are optional - only provided fields will be updated.
+    """
+
+    name: str | None = None
+    description: str | None = None
+    tags: list[str] | None = None
+    version: str | None = None
+
+
+class DeleteAssetResponse(BaseModel):
+    """Response for delete asset operation."""
+
+    deleted: bool
+    message: str
+
+
 @router.get("", response_model=AssetsListResponse)
 async def list_assets(
     current_user: CurrentUser,
@@ -278,3 +297,156 @@ async def build_asset_image(
     service.update_program(asset_id, program)
 
     return BuildImageResponse(result=result)
+
+
+@router.put("/{asset_id}", response_model=AssetResponse)
+async def update_asset(
+    asset_id: str,
+    update: UpdateAssetRequest,
+    current_user: CurrentUser,
+    service: AssetServiceDep,
+) -> AssetResponse:
+    """Update an asset's metadata.
+
+    Only the owner of an asset can update it. Supports partial updates -
+    only fields provided in the request body will be modified.
+
+    Updateable fields:
+    - name: Asset display name
+    - description: Asset description
+    - tags: List of tags
+    - version: Version string
+    """
+    # Try to find the asset across all stores
+    program = service.get_program(asset_id)
+    if program is not None:
+        # Check ownership
+        if program.owner != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to update this asset",
+            )
+        # Apply updates
+        if update.name is not None:
+            program.name = update.name
+        if update.description is not None:
+            program.description = update.description
+        if update.tags is not None:
+            program.tags = update.tags
+        if update.version is not None:
+            program.version = update.version
+        updated = service.update_program(asset_id, program)
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update asset",
+            )
+        return AssetResponse(asset=updated)
+
+    model = service.get_model(asset_id)
+    if model is not None:
+        if model.owner != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to update this asset",
+            )
+        if update.name is not None:
+            model.name = update.name
+        if update.description is not None:
+            model.description = update.description
+        if update.tags is not None:
+            model.tags = update.tags
+        if update.version is not None:
+            model.version = update.version
+        updated = service.update_model(asset_id, model)
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update asset",
+            )
+        return AssetResponse(asset=updated)
+
+    composition = service.get_composition(asset_id)
+    if composition is not None:
+        if composition.owner != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to update this asset",
+            )
+        if update.name is not None:
+            composition.name = update.name
+        if update.description is not None:
+            composition.description = update.description
+        if update.tags is not None:
+            composition.tags = update.tags
+        if update.version is not None:
+            composition.version = update.version
+        updated = service.update_composition(asset_id, composition)
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update asset",
+            )
+        return AssetResponse(asset=updated)
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Asset not found: {asset_id}",
+    )
+
+
+@router.delete("/{asset_id}", response_model=DeleteAssetResponse)
+async def delete_asset(
+    asset_id: str,
+    current_user: CurrentUser,
+    service: AssetServiceDep,
+) -> DeleteAssetResponse:
+    """Delete an asset (soft delete with ownership check).
+
+    Only the owner of an asset can delete it. For programs, this also
+    removes the associated workspace directory.
+    """
+    # Try to find the asset across all stores
+    program = service.get_program(asset_id)
+    if program is not None:
+        if program.owner != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to delete this asset",
+            )
+        deleted = service.delete_program(asset_id)
+        return DeleteAssetResponse(
+            deleted=deleted,
+            message=f"Program '{program.name}' deleted successfully",
+        )
+
+    model = service.get_model(asset_id)
+    if model is not None:
+        if model.owner != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to delete this asset",
+            )
+        deleted = service.delete_model(asset_id)
+        return DeleteAssetResponse(
+            deleted=deleted,
+            message=f"Model '{model.name}' deleted successfully",
+        )
+
+    composition = service.get_composition(asset_id)
+    if composition is not None:
+        if composition.owner != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to delete this asset",
+            )
+        deleted = service.delete_composition(asset_id)
+        return DeleteAssetResponse(
+            deleted=deleted,
+            message=f"Composition '{composition.name}' deleted successfully",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Asset not found: {asset_id}",
+    )

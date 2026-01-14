@@ -591,3 +591,287 @@ class TestBuildAssetImage:
         """Test that building an asset requires authentication."""
         response = client.post("/api/v1/assets/some-id/build")
         assert response.status_code == 401
+
+
+class TestUpdateAsset:
+    """Tests for PUT /api/v1/assets/{id} endpoint."""
+
+    def test_update_program_asset(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test updating a program asset's metadata."""
+        # Create first
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "program",
+                "name": "Original Name",
+                "description": "Original description",
+                "entrypoint": "main.py",
+                "projectRoot": "workspaces/update-test",
+                "dependencies": {"source": "requirements"},
+                "tags": ["original"],
+            },
+        )
+        assert create_response.status_code == 201
+        asset_id = create_response.json()["asset"]["id"]
+
+        # Update
+        update_response = client.put(
+            f"/api/v1/assets/{asset_id}",
+            headers=auth_headers,
+            json={
+                "name": "Updated Name",
+                "description": "Updated description",
+                "tags": ["updated", "new-tag"],
+            },
+        )
+
+        assert update_response.status_code == 200
+        data = update_response.json()
+        assert data["asset"]["name"] == "Updated Name"
+        assert data["asset"]["description"] == "Updated description"
+        assert data["asset"]["tags"] == ["updated", "new-tag"]
+        # Verify unchanged fields remain
+        assert data["asset"]["entrypoint"] == "main.py"
+
+    def test_update_model_asset(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test updating a model asset's metadata."""
+        # Create first
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "model",
+                "name": "Original Model",
+                "provider": "openai",
+                "modelId": "gpt-4",
+            },
+        )
+        assert create_response.status_code == 201
+        asset_id = create_response.json()["asset"]["id"]
+
+        # Update
+        update_response = client.put(
+            f"/api/v1/assets/{asset_id}",
+            headers=auth_headers,
+            json={"name": "Updated Model", "version": "2.0.0"},
+        )
+
+        assert update_response.status_code == 200
+        data = update_response.json()
+        assert data["asset"]["name"] == "Updated Model"
+        assert data["asset"]["version"] == "2.0.0"
+        # Verify unchanged fields
+        assert data["asset"]["provider"] == "openai"
+        assert data["asset"]["modelId"] == "gpt-4"
+
+    def test_update_composition_asset(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test updating a composition asset's metadata."""
+        # Create first
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "composition",
+                "name": "Original Workflow",
+            },
+        )
+        assert create_response.status_code == 201
+        asset_id = create_response.json()["asset"]["id"]
+
+        # Update
+        update_response = client.put(
+            f"/api/v1/assets/{asset_id}",
+            headers=auth_headers,
+            json={"name": "Updated Workflow", "description": "New description"},
+        )
+
+        assert update_response.status_code == 200
+        data = update_response.json()
+        assert data["asset"]["name"] == "Updated Workflow"
+        assert data["asset"]["description"] == "New description"
+
+    def test_update_nonexistent_asset(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test updating a non-existent asset returns 404."""
+        response = client.put(
+            "/api/v1/assets/nonexistent-id",
+            headers=auth_headers,
+            json={"name": "Should Fail"},
+        )
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_update_asset_requires_auth(self, client: TestClient) -> None:
+        """Test that updating an asset requires authentication."""
+        response = client.put(
+            "/api/v1/assets/some-id",
+            json={"name": "Unauthorized"},
+        )
+        assert response.status_code == 401
+
+    def test_update_asset_partial_update(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test that partial updates only modify specified fields."""
+        # Create
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "composition",
+                "name": "Partial Test",
+                "description": "Original description",
+                "tags": ["tag1", "tag2"],
+            },
+        )
+        assert create_response.status_code == 201
+        asset_id = create_response.json()["asset"]["id"]
+
+        # Update only name
+        update_response = client.put(
+            f"/api/v1/assets/{asset_id}",
+            headers=auth_headers,
+            json={"name": "New Name Only"},
+        )
+
+        assert update_response.status_code == 200
+        data = update_response.json()
+        assert data["asset"]["name"] == "New Name Only"
+        # Other fields unchanged
+        assert data["asset"]["description"] == "Original description"
+        assert data["asset"]["tags"] == ["tag1", "tag2"]
+
+
+class TestDeleteAsset:
+    """Tests for DELETE /api/v1/assets/{id} endpoint."""
+
+    def test_delete_program_asset(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test deleting a program asset."""
+        # Create first
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "program",
+                "name": "Delete Test Program",
+                "entrypoint": "main.py",
+                "projectRoot": "workspaces/delete-test",
+                "dependencies": {"source": "requirements"},
+            },
+        )
+        assert create_response.status_code == 201
+        asset_id = create_response.json()["asset"]["id"]
+
+        # Delete
+        delete_response = client.delete(
+            f"/api/v1/assets/{asset_id}",
+            headers=auth_headers,
+        )
+
+        assert delete_response.status_code == 200
+        data = delete_response.json()
+        assert data["deleted"] is True
+        assert "deleted successfully" in data["message"]
+
+        # Verify it's gone
+        get_response = client.get(
+            f"/api/v1/assets/{asset_id}",
+            headers=auth_headers,
+        )
+        assert get_response.status_code == 404
+
+    def test_delete_model_asset(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test deleting a model asset."""
+        # Create first
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "model",
+                "name": "Delete Test Model",
+                "provider": "anthropic",
+                "modelId": "claude-3",
+            },
+        )
+        assert create_response.status_code == 201
+        asset_id = create_response.json()["asset"]["id"]
+
+        # Delete
+        delete_response = client.delete(
+            f"/api/v1/assets/{asset_id}",
+            headers=auth_headers,
+        )
+
+        assert delete_response.status_code == 200
+        data = delete_response.json()
+        assert data["deleted"] is True
+
+        # Verify it's gone
+        get_response = client.get(
+            f"/api/v1/assets/{asset_id}",
+            headers=auth_headers,
+        )
+        assert get_response.status_code == 404
+
+    def test_delete_composition_asset(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test deleting a composition asset."""
+        # Create first
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "composition",
+                "name": "Delete Test Composition",
+            },
+        )
+        assert create_response.status_code == 201
+        asset_id = create_response.json()["asset"]["id"]
+
+        # Delete
+        delete_response = client.delete(
+            f"/api/v1/assets/{asset_id}",
+            headers=auth_headers,
+        )
+
+        assert delete_response.status_code == 200
+        data = delete_response.json()
+        assert data["deleted"] is True
+
+        # Verify it's gone
+        get_response = client.get(
+            f"/api/v1/assets/{asset_id}",
+            headers=auth_headers,
+        )
+        assert get_response.status_code == 404
+
+    def test_delete_nonexistent_asset(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test deleting a non-existent asset returns 404."""
+        response = client.delete(
+            "/api/v1/assets/nonexistent-id",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_delete_asset_requires_auth(self, client: TestClient) -> None:
+        """Test that deleting an asset requires authentication."""
+        response = client.delete("/api/v1/assets/some-id")
+        assert response.status_code == 401
