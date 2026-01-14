@@ -9,8 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from mellea_api.core.config import get_settings
 from mellea_api.core.telemetry import setup_telemetry
-from mellea_api.routes import assets_router, auth_router, health_router, runs_router
+from mellea_api.routes import (
+    assets_router,
+    auth_router,
+    controller_router,
+    health_router,
+    runs_router,
+)
 from mellea_api.services.auth import get_auth_service
+from mellea_api.services.idle_timeout import get_idle_timeout_controller
 
 # Configure logging
 logging.basicConfig(
@@ -24,6 +31,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan manager for startup and shutdown events."""
     settings = get_settings()
+    idle_controller = get_idle_timeout_controller()
 
     # Startup
     logger.info(f"Starting {settings.app_name} in {settings.environment} mode")
@@ -38,10 +46,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         auth_service.seed_default_users()
         logger.info("Default users seeded")
 
+    # Start idle timeout controller
+    await idle_controller.start()
+
     yield
 
     # Shutdown
     logger.info("Shutting down...")
+
+    # Stop idle timeout controller
+    await idle_controller.stop()
 
 
 def create_app() -> FastAPI:
@@ -74,6 +88,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(assets_router)
     app.include_router(runs_router)
+    app.include_router(controller_router)
 
     return app
 

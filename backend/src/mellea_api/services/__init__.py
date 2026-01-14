@@ -24,6 +24,12 @@ from mellea_api.services.environment_builder import (
     ImageBuildError,
     get_environment_builder_service,
 )
+from mellea_api.services.idle_timeout import (
+    IdleTimeoutController,
+    IdleTimeoutService,
+    get_idle_timeout_controller,
+    get_idle_timeout_service,
+)
 
 __all__ = [
     # Asset service
@@ -46,4 +52,9 @@ __all__ = [
     "EnvironmentBuilderService",
     "get_environment_builder_service",
     "ImageBuildError",
+    # Idle timeout service
+    "IdleTimeoutService",
+    "get_idle_timeout_service",
+    "IdleTimeoutController",
+    "get_idle_timeout_controller",
 ]

@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     registry_username: str | None = None
     registry_password: str | None = None
 
+    # Idle Timeout Controller
+    idle_controller_enabled: bool = True
+    idle_controller_interval_seconds: int = 300  # 5 minutes between checks
+    environment_idle_timeout_minutes: int = 60  # Stop environments idle for 1 hour
+    run_retention_days: int = 7  # Delete completed runs after 7 days
+    stale_job_timeout_minutes: int = 30  # Clean up orphaned K8s jobs
+
     def ensure_data_dirs(self) -> None:
         """Create data directory structure if it doesn't exist."""
         subdirs = ["metadata", "workspaces", "artifacts", "runs"]
