@@ -9,6 +9,7 @@ from mellea_api.core.deps import CurrentUser
 from mellea_api.models.common import RunExecutionStatus
 from mellea_api.models.run import Run
 from mellea_api.services.assets import AssetService, get_asset_service
+from mellea_api.services.credentials import CredentialService, get_credential_service
 from mellea_api.services.environment import (
     EnvironmentService,
     get_environment_service,
@@ -23,6 +24,7 @@ from mellea_api.services.run import (
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 EnvironmentServiceDep = Annotated[EnvironmentService, Depends(get_environment_service)]
 AssetServiceDep = Annotated[AssetService, Depends(get_asset_service)]
+CredentialServiceDep = Annotated[CredentialService, Depends(get_credential_service)]
 
 router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
 
@@ -31,6 +33,11 @@ class CreateRunRequest(BaseModel):
     """Request body for creating a new run."""
 
     program_id: str = Field(alias="programId", description="ID of the program to run")
+    credential_ids: list[str] = Field(
+        default_factory=list,
+        alias="credentialIds",
+        description="List of credential IDs to inject as secrets",
+    )
 
     class Config:
         populate_by_name = True
@@ -56,12 +63,16 @@ async def create_run(
     run_service: RunServiceDep,
     asset_service: AssetServiceDep,
     env_service: EnvironmentServiceDep,
+    credential_service: CredentialServiceDep,
 ) -> RunResponse:
     """Create a new run for a program.
 
     This creates a run in QUEUED status. The program must exist and have a
     built container image. An environment is automatically created or reused
     for the run.
+
+    Optionally, credential IDs can be provided to inject secrets into the
+    run container. All credentials must exist and be accessible.
 
     The run will be executed asynchronously by the run executor.
     """
@@ -79,6 +90,15 @@ async def create_run(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Program does not have a built container image. Build the image first.",
         )
+
+    # Validate all credentials exist
+    for cred_id in request.credential_ids:
+        credential = credential_service.get_credential(cred_id)
+        if credential is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Credential not found: {cred_id}",
+            )
 
     # Find or create an environment for this program
     environments = env_service.list_environments(program_id=request.program_id)
@@ -99,6 +119,7 @@ async def create_run(
     run = run_service.create_run(
         environment_id=environment.id,
         program_id=request.program_id,
+        credential_ids=request.credential_ids,
     )
 
     return RunResponse(run=run)

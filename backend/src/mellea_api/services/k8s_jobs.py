@@ -19,12 +19,17 @@ logger = logging.getLogger(__name__)
 # Namespace constants
 RUNS_NAMESPACE = "mellea-runs"
 BUILDS_NAMESPACE = "mellea-builds"
+CREDENTIALS_NAMESPACE = "mellea-credentials"
+
+# Secret mount configuration
+SECRETS_MOUNT_PATH = "/var/run/secrets/mellea"
 
 # Job configuration defaults
 DEFAULT_TTL_SECONDS = 3600  # 1 hour after completion
 DEFAULT_BACKOFF_LIMIT = 0  # No retries
 DEFAULT_USER_ID = 1000
 DEFAULT_GROUP_ID = 1000
+RUN_SERVICE_ACCOUNT = "mellea-run"
 
 
 class K8sJobService:
@@ -101,6 +106,7 @@ class K8sJobService:
         image_tag: str,
         resource_limits: ResourceLimits,
         entrypoint: str,
+        secret_names: list[str] | None = None,
     ) -> V1Job:
         """Build the Kubernetes Job specification for a program run.
 
@@ -110,6 +116,7 @@ class K8sJobService:
             image_tag: Docker image tag to run
             resource_limits: CPU, memory, and timeout constraints
             entrypoint: Python file to execute
+            secret_names: List of K8s Secret names to inject as volumes
 
         Returns:
             V1Job specification ready for creation
@@ -119,6 +126,59 @@ class K8sJobService:
         cpu_limit = str(resource_limits.cpu_cores)
         memory_request = f"{resource_limits.memory_mb // 2}Mi"
         memory_limit = f"{resource_limits.memory_mb}Mi"
+
+        # Base volume mounts
+        volume_mounts = [
+            client.V1VolumeMount(name="tmp", mount_path="/tmp"),
+            client.V1VolumeMount(name="output", mount_path="/output"),
+        ]
+
+        # Base volumes
+        volumes = [
+            client.V1Volume(name="tmp", empty_dir=client.V1EmptyDirVolumeSource()),
+            client.V1Volume(name="output", empty_dir=client.V1EmptyDirVolumeSource()),
+        ]
+
+        # Add secret volume if credentials are provided
+        if secret_names:
+            # Add volume mount for secrets
+            volume_mounts.append(
+                client.V1VolumeMount(
+                    name="mellea-secrets",
+                    mount_path=SECRETS_MOUNT_PATH,
+                    read_only=True,
+                )
+            )
+
+            # Build projected volume sources from secrets
+            # Each secret is mounted in a subdirectory named after the secret
+            secret_sources = [
+                client.V1VolumeProjection(
+                    secret=client.V1SecretProjection(
+                        name=secret_name,
+                        items=None,  # Mount all keys from the secret
+                    )
+                )
+                for secret_name in secret_names
+            ]
+
+            # Add projected volume combining all secrets
+            volumes.append(
+                client.V1Volume(
+                    name="mellea-secrets",
+                    projected=client.V1ProjectedVolumeSource(
+                        sources=secret_sources,
+                        default_mode=0o400,  # Read-only for owner
+                    ),
+                )
+            )
+
+            logger.debug(
+                "Adding %d secrets to job %s: %s",
+                len(secret_names),
+                job_name,
+                secret_names,
+            )
 
         # Container spec with security context
         container = client.V1Container(
@@ -134,25 +194,22 @@ class K8sJobService:
                 capabilities=client.V1Capabilities(drop=["ALL"]),
                 read_only_root_filesystem=True,
             ),
-            volume_mounts=[
-                client.V1VolumeMount(name="tmp", mount_path="/tmp"),
-                client.V1VolumeMount(name="output", mount_path="/output"),
-            ],
+            volume_mounts=volume_mounts,
         )
 
         # Pod spec with security context
+        # Use service account if secrets are being injected (for cross-namespace access)
+        service_account = RUN_SERVICE_ACCOUNT if secret_names else None
         pod_spec = client.V1PodSpec(
             restart_policy="Never",
+            service_account_name=service_account,
             security_context=client.V1PodSecurityContext(
                 run_as_non_root=True,
                 run_as_user=DEFAULT_USER_ID,
                 fs_group=DEFAULT_GROUP_ID,
             ),
             containers=[container],
-            volumes=[
-                client.V1Volume(name="tmp", empty_dir=client.V1EmptyDirVolumeSource()),
-                client.V1Volume(name="output", empty_dir=client.V1EmptyDirVolumeSource()),
-            ],
+            volumes=volumes,
         )
 
         # Job spec
@@ -194,6 +251,7 @@ class K8sJobService:
         image_tag: str,
         resource_limits: ResourceLimits | None = None,
         entrypoint: str = "main.py",
+        secret_names: list[str] | None = None,
     ) -> str:
         """Create a Kubernetes Job to run a program.
 
@@ -202,6 +260,7 @@ class K8sJobService:
             image_tag: Docker image tag for the program
             resource_limits: Optional resource constraints (uses defaults if None)
             entrypoint: Python file to execute (default: main.py)
+            secret_names: List of K8s Secret names to inject into the container
 
         Returns:
             Name of the created job
@@ -219,6 +278,7 @@ class K8sJobService:
             image_tag=image_tag,
             resource_limits=resource_limits,
             entrypoint=entrypoint,
+            secret_names=secret_names,
         )
 
         try:

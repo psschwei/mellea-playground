@@ -108,6 +108,7 @@ class TestSubmitRun:
             image_tag="mellea-prog:test123",
             resource_limits=sample_environment.resource_limits,
             entrypoint="main.py",
+            secret_names=[],
         )
 
     def test_submit_run_custom_entrypoint(

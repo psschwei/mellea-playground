@@ -8,6 +8,11 @@ resources:
   - namespaces/resource-quotas.yaml
   - namespaces/network-policies.yaml
 
+  # RBAC (after namespaces)
+  - rbac/run-service-account.yaml
+  - rbac/credential-reader-role.yaml
+  - rbac/credential-reader-binding.yaml
+
   # Storage
   - storage/storage-class.yaml
   - storage/persistent-volumes.yaml

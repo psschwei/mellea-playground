@@ -837,6 +837,27 @@ class CredentialService:
 
         return not credential.is_expired
 
+    def get_k8s_secret_name(self, credential_id: str) -> str | None:
+        """Get the Kubernetes Secret name for a credential.
+
+        This returns the K8s Secret name that corresponds to the credential,
+        following the same naming convention used by K8sSecretsBackend.
+
+        Args:
+            credential_id: Credential's unique identifier
+
+        Returns:
+            K8s Secret name (e.g., 'mellea-cred-abc12345') or None if not found
+        """
+        # Verify credential exists
+        credential = self.backend.get(credential_id)
+        if credential is None:
+            return None
+
+        # Generate K8s secret name using same logic as K8sSecretsBackend
+        safe_id = hashlib.sha256(credential_id.encode()).hexdigest()[:8]
+        return f"mellea-cred-{safe_id}"
+
 
 # Global service instance
 _credential_service: CredentialService | None = None

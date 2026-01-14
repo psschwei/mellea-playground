@@ -125,12 +125,14 @@ class RunService:
         self,
         environment_id: str,
         program_id: str,
+        credential_ids: list[str] | None = None,
     ) -> Run:
         """Create a new run in QUEUED status.
 
         Args:
             environment_id: ID of the environment to run in
             program_id: ID of the program being executed
+            credential_ids: List of credential IDs to inject as secrets
 
         Returns:
             The created Run in QUEUED status
@@ -139,11 +141,12 @@ class RunService:
             environmentId=environment_id,
             programId=program_id,
             status=RunExecutionStatus.QUEUED,
+            credentialIds=credential_ids or [],
         )
         created = self.run_store.create(run)
         logger.info(
             f"Created run {created.id} for program {program_id} "
-            f"in environment {environment_id}"
+            f"in environment {environment_id} with {len(run.credential_ids)} credentials"
         )
         return created
 

@@ -73,6 +73,7 @@ class Run(BaseModel):
         started_at: When execution actually began
         completed_at: When execution finished (success, failure, or cancellation)
         output_path: Path to output files/logs
+        credential_ids: List of credential IDs to inject as secrets
     """
 
     id: str = Field(default_factory=generate_uuid)
@@ -86,6 +87,7 @@ class Run(BaseModel):
     started_at: datetime | None = Field(default=None, alias="startedAt")
     completed_at: datetime | None = Field(default=None, alias="completedAt")
     output_path: str | None = Field(default=None, alias="outputPath")
+    credential_ids: list[str] = Field(default_factory=list, alias="credentialIds")
 
     class Config:
         populate_by_name = True

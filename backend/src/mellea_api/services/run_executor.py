@@ -5,6 +5,7 @@ import logging
 from mellea_api.models.common import RunExecutionStatus
 from mellea_api.models.k8s import JobInfo, JobStatus
 from mellea_api.models.run import Run
+from mellea_api.services.credentials import CredentialService, get_credential_service
 from mellea_api.services.environment import EnvironmentService, get_environment_service
 from mellea_api.services.k8s_jobs import K8sJobService, get_k8s_job_service
 from mellea_api.services.run import RunNotFoundError, RunService, get_run_service
@@ -61,6 +62,7 @@ class RunExecutor:
         run_service: RunService | None = None,
         k8s_service: K8sJobService | None = None,
         environment_service: EnvironmentService | None = None,
+        credential_service: CredentialService | None = None,
     ) -> None:
         """Initialize the RunExecutor.
 
@@ -68,10 +70,12 @@ class RunExecutor:
             run_service: RunService instance (uses global if not provided)
             k8s_service: K8sJobService instance (uses global if not provided)
             environment_service: EnvironmentService instance (uses global if not provided)
+            credential_service: CredentialService instance (uses global if not provided)
         """
         self._run_service = run_service
         self._k8s_service = k8s_service
         self._environment_service = environment_service
+        self._credential_service = credential_service
 
     @property
     def run_service(self) -> RunService:
@@ -93,6 +97,13 @@ class RunExecutor:
         if self._environment_service is None:
             self._environment_service = get_environment_service()
         return self._environment_service
+
+    @property
+    def credential_service(self) -> CredentialService:
+        """Get the CredentialService, using global instance if not set."""
+        if self._credential_service is None:
+            self._credential_service = get_credential_service()
+        return self._credential_service
 
     def submit_run(
         self,
@@ -138,6 +149,14 @@ class RunExecutor:
         job_name = f"mellea-run-{run.environment_id[:8].lower()}"
         run = self.run_service.start_run(run_id, job_name)
 
+        # Resolve credential IDs to K8s secret names
+        secret_names: list[str] = []
+        for cred_id in run.credential_ids:
+            secret_name = self.credential_service.get_k8s_secret_name(cred_id)
+            if secret_name:
+                secret_names.append(secret_name)
+                logger.debug("Resolved credential %s to secret %s", cred_id, secret_name)
+
         # Create the K8s job
         try:
             self.k8s_service.create_run_job(
@@ -145,6 +164,7 @@ class RunExecutor:
                 image_tag=env.image_tag,
                 resource_limits=env.resource_limits,
                 entrypoint=entrypoint,
+                secret_names=secret_names,
             )
         except RuntimeError as e:
             # Mark run as failed if job creation fails (STARTING -> FAILED is valid)
