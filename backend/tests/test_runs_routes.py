@@ -17,6 +17,7 @@ def client() -> Iterator[TestClient]:
     import mellea_api.services.credentials as cred_module
     import mellea_api.services.environment as env_module
     import mellea_api.services.run as run_module
+    import mellea_api.services.run_executor as run_executor_module
     from mellea_api.core.config import get_settings
 
     # Use a temporary directory for data
@@ -32,6 +33,7 @@ def client() -> Iterator[TestClient]:
         cred_module._credential_service = None
         env_module._environment_service = None
         run_module._run_service = None
+        run_executor_module._run_executor = None
 
         # Get fresh settings and ensure directories exist
         settings = get_settings()
@@ -59,6 +61,7 @@ def client() -> Iterator[TestClient]:
             cred_module._credential_service = None
             env_module._environment_service = None
             run_module._run_service = None
+            run_executor_module._run_executor = None
 
 
 @pytest.fixture

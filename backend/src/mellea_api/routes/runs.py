@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from mellea_api.core.deps import CurrentUser
@@ -194,7 +194,13 @@ async def cancel_run(
     run_id: str,
     current_user: CurrentUser,
     run_executor: RunExecutorDep,
-    request: CancelRunRequest | None = None,
+    force: bool = Query(
+        default=False,
+        description=(
+            "If True, immediately terminates without grace period (SIGKILL). "
+            "If False (default), allows graceful shutdown with SIGTERM first."
+        ),
+    ),
 ) -> RunResponse:
     """Cancel a run with graceful shutdown.
 
@@ -207,7 +213,6 @@ async def cancel_run(
         force: If True, immediately terminates without grace period (SIGKILL).
                If False (default), allows graceful shutdown with SIGTERM first.
     """
-    force = request.force if request else False
     try:
         run = run_executor.cancel_run(run_id, force=force)
         return RunResponse(run=run)
