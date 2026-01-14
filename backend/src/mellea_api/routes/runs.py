@@ -58,19 +58,6 @@ class RunsListResponse(BaseModel):
     total: int
 
 
-class CancelRunRequest(BaseModel):
-    """Request body for cancelling a run."""
-
-    force: bool = Field(
-        default=False,
-        description=(
-            "If True, immediately terminates without grace period (SIGKILL). "
-            "If False (default), allows graceful shutdown with SIGTERM first, "
-            "waiting up to 30 seconds for the process to clean up."
-        ),
-    )
-
-
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
 async def create_run(
     request: CreateRunRequest,
