@@ -69,11 +69,15 @@ class BuildContext(BaseModel):
 class BuildResult(BaseModel):
     """Result of a completed image build."""
 
-    program_id: str
+    program_id: str = Field(serialization_alias="programId")
     success: bool
-    image_tag: str | None = None
-    cache_hit: bool = False
-    error_message: str | None = None
-    total_duration_seconds: float
-    deps_build_duration_seconds: float | None = None
-    program_build_duration_seconds: float | None = None
+    image_tag: str | None = Field(default=None, serialization_alias="imageTag")
+    cache_hit: bool = Field(default=False, serialization_alias="cacheHit")
+    error_message: str | None = Field(default=None, serialization_alias="errorMessage")
+    total_duration_seconds: float = Field(serialization_alias="totalDurationSeconds")
+    deps_build_duration_seconds: float | None = Field(
+        default=None, serialization_alias="depsBuildDurationSeconds"
+    )
+    program_build_duration_seconds: float | None = Field(
+        default=None, serialization_alias="programBuildDurationSeconds"
+    )

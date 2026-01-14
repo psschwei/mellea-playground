@@ -12,12 +12,14 @@ from mellea_api.models.assets import (
     ModelAsset,
     ProgramAsset,
 )
-from mellea_api.models.common import DependencySource
+from mellea_api.models.build import BuildResult
+from mellea_api.models.common import DependencySource, ImageBuildStatus
 from mellea_api.services.assets import (
     AssetAlreadyExistsError,
     AssetService,
     get_asset_service,
 )
+from mellea_api.services.environment_builder import get_environment_builder_service
 
 AssetServiceDep = Annotated[AssetService, Depends(get_asset_service)]
 
@@ -58,6 +60,22 @@ class AssetsListResponse(BaseModel):
 
     assets: list[AssetType]
     total: int
+
+
+class BuildImageRequest(BaseModel):
+    """Request model for building a program image."""
+
+    force_rebuild: bool = Field(default=False, alias="forceRebuild")
+    push: bool = Field(default=False)
+
+    class Config:
+        populate_by_name = True
+
+
+class BuildImageResponse(BaseModel):
+    """Response for build image operation."""
+
+    result: BuildResult
 
 
 @router.get("", response_model=AssetsListResponse)
@@ -194,3 +212,69 @@ async def get_asset(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Asset not found: {asset_id}",
     )
+
+
+@router.post("/{asset_id}/build", response_model=BuildImageResponse)
+async def build_asset_image(
+    asset_id: str,
+    current_user: CurrentUser,
+    service: AssetServiceDep,
+    request: BuildImageRequest | None = None,
+) -> BuildImageResponse:
+    """Build a container image for a program asset.
+
+    Triggers the build process for the program's container image. The built image
+    tag will be stored on the program asset for subsequent runs.
+
+    Args:
+        asset_id: ID of the program asset to build
+        request: Optional build parameters (forceRebuild, push)
+
+    Returns:
+        Build result with success status, image tag, and timing information.
+
+    Raises:
+        404: If the asset is not found
+        400: If the asset is not a program (only programs can be built)
+    """
+    # Get the program
+    program = service.get_program(asset_id)
+    if program is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Asset not found: {asset_id}",
+        )
+
+    # Get workspace path
+    workspace_path = service.settings.data_dir / "workspaces" / asset_id
+
+    # Update status to building
+    program.image_build_status = ImageBuildStatus.BUILDING
+    program.image_build_error = None
+    service.update_program(asset_id, program)
+
+    # Get build parameters
+    force_rebuild = request.force_rebuild if request else False
+    push = request.push if request else False
+
+    # Build the image
+    builder = get_environment_builder_service()
+    result = builder.build_image(
+        program=program,
+        workspace_path=workspace_path,
+        force_rebuild=force_rebuild,
+        push=push,
+    )
+
+    # Update program with result
+    if result.success:
+        program.image_tag = result.image_tag
+        program.image_build_status = ImageBuildStatus.READY
+        program.image_build_error = None
+    else:
+        program.image_build_status = ImageBuildStatus.FAILED
+        program.image_build_error = result.error_message
+
+    service.update_program(asset_id, program)
+
+    return BuildImageResponse(result=result)

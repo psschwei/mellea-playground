@@ -3,9 +3,12 @@
 import os
 import tempfile
 from collections.abc import Iterator
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+from mellea_api.models.build import BuildResult
 
 
 @pytest.fixture
@@ -415,3 +418,176 @@ class TestListAssets:
         data = response.json()
         assert data["total"] == 1
         assert "Special" in data["assets"][0]["name"]
+
+
+class TestBuildAssetImage:
+    """Tests for POST /api/v1/assets/{id}/build endpoint."""
+
+    def test_build_asset_image_success(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test successfully building a program image."""
+        # Create a program first
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "program",
+                "name": "Build Test Program",
+                "entrypoint": "main.py",
+                "projectRoot": "workspaces/build-test",
+                "dependencies": {"source": "requirements"},
+            },
+        )
+        assert create_response.status_code == 201
+        asset_id = create_response.json()["asset"]["id"]
+
+        # Mock the environment builder service
+        mock_result = BuildResult(
+            program_id=asset_id,
+            success=True,
+            image_tag=f"mellea-program-{asset_id}:latest",
+            cache_hit=False,
+            total_duration_seconds=5.5,
+        )
+
+        with patch(
+            "mellea_api.routes.assets.get_environment_builder_service"
+        ) as mock_get_builder:
+            mock_builder = MagicMock()
+            mock_builder.build_image.return_value = mock_result
+            mock_get_builder.return_value = mock_builder
+
+            # Build the image
+            build_response = client.post(
+                f"/api/v1/assets/{asset_id}/build",
+                headers=auth_headers,
+            )
+
+        assert build_response.status_code == 200
+        data = build_response.json()
+        assert data["result"]["success"] is True
+        assert data["result"]["imageTag"] == f"mellea-program-{asset_id}:latest"
+        assert data["result"]["programId"] == asset_id
+
+        # Verify the program was updated with the image tag
+        get_response = client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)
+        assert get_response.status_code == 200
+        program_data = get_response.json()["asset"]
+        assert program_data["imageTag"] == f"mellea-program-{asset_id}:latest"
+        assert program_data["imageBuildStatus"] == "ready"
+
+    def test_build_asset_image_with_options(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test building with forceRebuild and push options."""
+        # Create a program
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "program",
+                "name": "Build Options Test",
+                "entrypoint": "main.py",
+                "projectRoot": "workspaces/options-test",
+                "dependencies": {"source": "requirements"},
+            },
+        )
+        assert create_response.status_code == 201
+        asset_id = create_response.json()["asset"]["id"]
+
+        mock_result = BuildResult(
+            program_id=asset_id,
+            success=True,
+            image_tag=f"mellea-program-{asset_id}:latest",
+            cache_hit=False,
+            total_duration_seconds=10.0,
+        )
+
+        with patch(
+            "mellea_api.routes.assets.get_environment_builder_service"
+        ) as mock_get_builder:
+            mock_builder = MagicMock()
+            mock_builder.build_image.return_value = mock_result
+            mock_get_builder.return_value = mock_builder
+
+            # Build with options
+            build_response = client.post(
+                f"/api/v1/assets/{asset_id}/build",
+                headers=auth_headers,
+                json={"forceRebuild": True, "push": True},
+            )
+
+            # Verify the options were passed to build_image
+            mock_builder.build_image.assert_called_once()
+            call_kwargs = mock_builder.build_image.call_args.kwargs
+            assert call_kwargs["force_rebuild"] is True
+            assert call_kwargs["push"] is True
+
+        assert build_response.status_code == 200
+
+    def test_build_asset_image_failure(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test handling of build failure."""
+        # Create a program
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "program",
+                "name": "Build Fail Test",
+                "entrypoint": "main.py",
+                "projectRoot": "workspaces/fail-test",
+                "dependencies": {"source": "requirements"},
+            },
+        )
+        assert create_response.status_code == 201
+        asset_id = create_response.json()["asset"]["id"]
+
+        # Mock a failed build
+        mock_result = BuildResult(
+            program_id=asset_id,
+            success=False,
+            error_message="Docker daemon not available",
+            total_duration_seconds=0.5,
+        )
+
+        with patch(
+            "mellea_api.routes.assets.get_environment_builder_service"
+        ) as mock_get_builder:
+            mock_builder = MagicMock()
+            mock_builder.build_image.return_value = mock_result
+            mock_get_builder.return_value = mock_builder
+
+            build_response = client.post(
+                f"/api/v1/assets/{asset_id}/build",
+                headers=auth_headers,
+            )
+
+        assert build_response.status_code == 200
+        data = build_response.json()
+        assert data["result"]["success"] is False
+        assert data["result"]["errorMessage"] == "Docker daemon not available"
+
+        # Verify the program status was updated to failed
+        get_response = client.get(f"/api/v1/assets/{asset_id}", headers=auth_headers)
+        program_data = get_response.json()["asset"]
+        assert program_data["imageBuildStatus"] == "failed"
+        assert program_data["imageBuildError"] == "Docker daemon not available"
+
+    def test_build_nonexistent_asset(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test building a non-existent asset returns 404."""
+        response = client.post(
+            "/api/v1/assets/nonexistent-id/build",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_build_asset_requires_auth(self, client: TestClient) -> None:
+        """Test that building an asset requires authentication."""
+        response = client.post("/api/v1/assets/some-id/build")
+        assert response.status_code == 401
