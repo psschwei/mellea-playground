@@ -2,9 +2,9 @@
 
 import asyncio
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -227,7 +227,9 @@ class TestGetPoolStatus:
         status = warmup_service.get_pool_status()
 
         assert status["current_pool_size"] == 1
-        assert len(status["warm_environments"]) == 1
+        warm_envs = status["warm_environments"]
+        assert isinstance(warm_envs, list)
+        assert len(warm_envs) == 1
 
 
 class TestRecycleEnvironment:

@@ -98,6 +98,17 @@ class EnvironmentStatus(str, Enum):
     DELETING = "deleting"  # Being cleaned up
 
 
+class CredentialType(str, Enum):
+    """Type of stored credential."""
+
+    API_KEY = "api_key"  # LLM provider API keys
+    REGISTRY = "registry"  # Container registry credentials
+    DATABASE = "database"  # Database connection credentials
+    OAUTH_TOKEN = "oauth_token"  # OAuth tokens
+    SSH_KEY = "ssh_key"  # SSH keys for deployments
+    CUSTOM = "custom"  # User-defined credential type
+
+
 class RunExecutionStatus(str, Enum):
     """Status of a program run execution.
 

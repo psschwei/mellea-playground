@@ -24,11 +24,6 @@ from mellea_api.services.environment_builder import (
     ImageBuildError,
     get_environment_builder_service,
 )
-from mellea_api.services.credentials import (
-    CredentialNotFoundError,
-    CredentialService,
-    get_credential_service,
-)
 from mellea_api.services.idle_timeout import (
     IdleTimeoutController,
     IdleTimeoutService,

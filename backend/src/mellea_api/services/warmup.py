@@ -10,8 +10,6 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from mellea_api.core.config import Settings, get_settings
-from mellea_api.core.store import JsonStore
-from mellea_api.models.build import LayerCacheEntry
 from mellea_api.models.common import EnvironmentStatus
 from mellea_api.services.assets import AssetService, get_asset_service
 from mellea_api.services.environment import EnvironmentService, get_environment_service
@@ -170,7 +168,7 @@ class WarmupService:
 
         return [env for env in warm_envs if now - env.created_at > max_age]
 
-    def get_pool_status(self) -> dict:
+    def get_pool_status(self) -> dict[str, object]:
         """Get current status of the warm pool.
 
         Returns:
@@ -244,8 +242,11 @@ class WarmupService:
                 logger.warning(f"Program {program_id} not found for warmup")
                 return None
 
+            # Get workspace path
+            workspace_path = self.settings.data_dir / "workspaces" / program_id
+
             # Build the image
-            result = self.environment_builder.build_image(program_id)
+            result = self.environment_builder.build_image(program, workspace_path)
             if not result.success or not result.image_tag:
                 logger.error(f"Failed to build image for warmup: {result.error_message}")
                 return None
@@ -257,10 +258,13 @@ class WarmupService:
             )
 
             # Mark as ready
-            env = self.environment_service.mark_ready(env.id)
-            logger.info(f"Created warm environment {env.id} for program {program_id}")
+            ready_env = self.environment_service.mark_ready(env.id)
+            if ready_env is None:
+                logger.error(f"Failed to mark environment {env.id} as ready")
+                return None
+            logger.info(f"Created warm environment {ready_env.id} for program {program_id}")
 
-            return env
+            return ready_env
 
         except Exception as e:
             logger.error(f"Failed to create warm environment for {program_id}: {e}")
@@ -331,8 +335,8 @@ class WarmupService:
             ][:needed]
 
             for program in programs_to_warm:
-                env = self.create_warm_environment(program.id)
-                if env:
+                created_env = self.create_warm_environment(program.id)
+                if created_env:
                     metrics.environments_created += 1
                 else:
                     metrics.errors.append(f"Failed to warm program {program.id}")
@@ -393,7 +397,7 @@ class WarmupController:
         """
         self.settings = settings or get_settings()
         self._warmup_service = warmup_service
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._running = False
 
     @property
