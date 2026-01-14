@@ -2,7 +2,7 @@
 
 > **Note:** This project is in active development. Features and APIs may change.
 
-A centralized GUI playground for cataloging, running, and composing [mellea](https://github.com/anthropics/mellea) programs across multiple LLMs.
+A centralized GUI playground for cataloging, running, and composing [mellea](https://github.com/generative-computing/mellea) programs across multiple LLMs.
 
 ## What is this?
 
