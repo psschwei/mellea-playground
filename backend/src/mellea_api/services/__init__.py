@@ -24,11 +24,22 @@ from mellea_api.services.environment_builder import (
     ImageBuildError,
     get_environment_builder_service,
 )
+from mellea_api.services.credentials import (
+    CredentialNotFoundError,
+    CredentialService,
+    get_credential_service,
+)
 from mellea_api.services.idle_timeout import (
     IdleTimeoutController,
     IdleTimeoutService,
     get_idle_timeout_controller,
     get_idle_timeout_service,
+)
+from mellea_api.services.warmup import (
+    WarmupController,
+    WarmupService,
+    get_warmup_controller,
+    get_warmup_service,
 )
 
 __all__ = [
@@ -57,4 +68,9 @@ __all__ = [
     "get_idle_timeout_service",
     "IdleTimeoutController",
     "get_idle_timeout_controller",
+    # Warmup service
+    "WarmupService",
+    "get_warmup_service",
+    "WarmupController",
+    "get_warmup_controller",
 ]

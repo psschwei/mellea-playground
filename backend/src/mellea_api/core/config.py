@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     run_retention_days: int = 7  # Delete completed runs after 7 days
     stale_job_timeout_minutes: int = 30  # Clean up orphaned K8s jobs
 
+    # Environment Warmup Controller
+    warmup_enabled: bool = True
+    warmup_interval_seconds: int = 60  # Check warmup pool every minute
+    warmup_pool_size: int = 3  # Number of warm environments to maintain
+    warmup_max_age_minutes: int = 30  # Recycle warm envs older than this
+    warmup_popular_deps_count: int = 5  # Pre-build top N popular dependency sets
+
     def ensure_data_dirs(self) -> None:
         """Create data directory structure if it doesn't exist."""
         subdirs = ["metadata", "workspaces", "artifacts", "runs"]

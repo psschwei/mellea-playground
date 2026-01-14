@@ -18,6 +18,7 @@ from mellea_api.routes import (
 )
 from mellea_api.services.auth import get_auth_service
 from mellea_api.services.idle_timeout import get_idle_timeout_controller
+from mellea_api.services.warmup import get_warmup_controller
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan manager for startup and shutdown events."""
     settings = get_settings()
     idle_controller = get_idle_timeout_controller()
+    warmup_controller = get_warmup_controller()
 
     # Startup
     logger.info(f"Starting {settings.app_name} in {settings.environment} mode")
@@ -46,15 +48,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         auth_service.seed_default_users()
         logger.info("Default users seeded")
 
-    # Start idle timeout controller
+    # Start background controllers
     await idle_controller.start()
+    await warmup_controller.start()
 
     yield
 
     # Shutdown
     logger.info("Shutting down...")
 
-    # Stop idle timeout controller
+    # Stop background controllers
+    await warmup_controller.stop()
     await idle_controller.stop()
 
 

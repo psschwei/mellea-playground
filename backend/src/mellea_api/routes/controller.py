@@ -1,10 +1,11 @@
-"""Controller routes for idle timeout management."""
+"""Controller routes for idle timeout and warmup management."""
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from mellea_api.core.config import get_settings
 from mellea_api.services.idle_timeout import get_idle_timeout_service
+from mellea_api.services.warmup import get_warmup_service
 
 router = APIRouter(prefix="/api/v1/controller", tags=["Controller"])
 
@@ -187,4 +188,165 @@ async def stop_environment(environment_id: str) -> dict:
         "resourceId": result.resource_id,
         "action": result.action,
         "error": result.error,
+    }
+
+
+# -------------------------------------------------------------------------
+# Warmup Endpoints
+# -------------------------------------------------------------------------
+
+
+class WarmupMetricsResponse(BaseModel):
+    """Response model for warmup metrics."""
+
+    timestamp: str
+    warm_pool_size: int = Field(alias="warmPoolSize")
+    environments_created: int = Field(alias="environmentsCreated")
+    environments_recycled: int = Field(alias="environmentsRecycled")
+    layers_pre_built: int = Field(alias="layersPreBuilt")
+    errors: list[str]
+    duration_seconds: float = Field(alias="durationSeconds")
+
+    class Config:
+        populate_by_name = True
+
+
+class WarmupConfigResponse(BaseModel):
+    """Response model for warmup configuration."""
+
+    enabled: bool
+    interval_seconds: int = Field(alias="intervalSeconds")
+    pool_size: int = Field(alias="poolSize")
+    max_age_minutes: int = Field(alias="maxAgeMinutes")
+    popular_deps_count: int = Field(alias="popularDepsCount")
+
+    class Config:
+        populate_by_name = True
+
+
+@router.get("/warmup/status")
+async def get_warmup_status() -> dict:
+    """Get current status of the warm pool.
+
+    Returns pool size, warm environments, and configuration thresholds.
+    """
+    service = get_warmup_service()
+    return service.get_pool_status()
+
+
+@router.post("/warmup/cycle", response_model=WarmupMetricsResponse)
+async def trigger_warmup_cycle() -> dict:
+    """Manually trigger a warmup cycle.
+
+    Runs the warmup process immediately instead of waiting
+    for the next scheduled run. Creates new warm environments
+    and recycles stale ones.
+    """
+    service = get_warmup_service()
+    metrics = await service.run_warmup_cycle()
+
+    return {
+        "timestamp": metrics.timestamp.isoformat(),
+        "warmPoolSize": metrics.warm_pool_size,
+        "environmentsCreated": metrics.environments_created,
+        "environmentsRecycled": metrics.environments_recycled,
+        "layersPreBuilt": metrics.layers_pre_built,
+        "errors": metrics.errors,
+        "durationSeconds": metrics.duration_seconds,
+    }
+
+
+@router.get("/warmup/metrics", response_model=WarmupMetricsResponse | None)
+async def get_warmup_metrics() -> dict | None:
+    """Get metrics from the last warmup cycle.
+
+    Returns metrics from the most recent warmup run, or null if
+    no warmup has run yet.
+    """
+    service = get_warmup_service()
+    metrics = service.get_last_metrics()
+
+    if metrics is None:
+        return None
+
+    return {
+        "timestamp": metrics.timestamp.isoformat(),
+        "warmPoolSize": metrics.warm_pool_size,
+        "environmentsCreated": metrics.environments_created,
+        "environmentsRecycled": metrics.environments_recycled,
+        "layersPreBuilt": metrics.layers_pre_built,
+        "errors": metrics.errors,
+        "durationSeconds": metrics.duration_seconds,
+    }
+
+
+@router.get("/warmup/config", response_model=WarmupConfigResponse)
+async def get_warmup_config() -> dict:
+    """Get current warmup configuration.
+
+    Returns the current warmup pool settings and thresholds.
+    """
+    settings = get_settings()
+
+    return {
+        "enabled": settings.warmup_enabled,
+        "intervalSeconds": settings.warmup_interval_seconds,
+        "poolSize": settings.warmup_pool_size,
+        "maxAgeMinutes": settings.warmup_max_age_minutes,
+        "popularDepsCount": settings.warmup_popular_deps_count,
+    }
+
+
+@router.get("/warmup/popular-deps")
+async def get_popular_dependencies() -> dict:
+    """Get the most popular dependency sets.
+
+    Returns dependency layers sorted by usage count, which are
+    candidates for pre-building.
+    """
+    service = get_warmup_service()
+    popular = service.get_popular_dependencies()
+
+    return {
+        "count": len(popular),
+        "dependencies": [
+            {
+                "cacheKey": dep.cache_key,
+                "imageTag": dep.image_tag,
+                "useCount": dep.use_count,
+                "lastUsedAt": dep.last_used_at.isoformat(),
+            }
+            for dep in popular
+        ],
+    }
+
+
+@router.post("/warmup/create/{program_id}")
+async def create_warm_environment(program_id: str) -> dict:
+    """Manually create a warm environment for a specific program.
+
+    Args:
+        program_id: ID of the program to create warm environment for
+
+    Returns:
+        Created environment details or error
+    """
+    service = get_warmup_service()
+    env = service.create_warm_environment(program_id)
+
+    if env is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create warm environment for program {program_id}",
+        )
+
+    return {
+        "success": True,
+        "environment": {
+            "id": env.id,
+            "programId": env.program_id,
+            "imageTag": env.image_tag,
+            "status": env.status.value,
+            "createdAt": env.created_at.isoformat(),
+        },
     }
