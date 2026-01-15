@@ -1,6 +1,7 @@
 export { default as apiClient } from './client';
 export { setToken, getToken, clearToken, isAuthenticated } from './client';
 export { archiveUploadApi } from './archive-upload';
+export { assetsApi } from './assets';
 export { authApi } from './auth';
 export { credentialsApi } from './credentials';
 export { githubImportApi } from './github-import';

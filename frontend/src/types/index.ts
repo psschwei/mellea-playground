@@ -281,6 +281,18 @@ export interface TestModelResponse {
   latencyMs?: number;
 }
 
+// Composition asset types (placeholder for future)
+export interface CompositionAsset extends AssetMetadata {
+  type: 'composition';
+  steps: unknown[]; // To be defined
+}
+
+// Union type for all asset types
+export type Asset = ProgramAsset | ModelAsset | CompositionAsset;
+
+// Asset type literal
+export type AssetType = 'program' | 'model' | 'composition';
+
 // API response types
 export interface ApiError {
   detail: string;

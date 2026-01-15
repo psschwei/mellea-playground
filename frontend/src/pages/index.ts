@@ -5,3 +5,5 @@ export { ProgramsPage } from './Programs';
 export { ProgramDetailPage } from './ProgramDetail';
 export { CredentialsPage } from './Credentials';
 export { RunsPage } from './Runs';
+export { CatalogPage } from './Catalog';
+export { AssetDetailPage } from './AssetDetail';

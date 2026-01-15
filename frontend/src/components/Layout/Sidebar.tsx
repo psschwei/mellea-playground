@@ -2,6 +2,7 @@ import { Box, VStack, Link, Icon, Text, useColorModeValue } from '@chakra-ui/rea
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   FiHome,
+  FiFolder,
   FiCode,
   FiKey,
   FiCpu,
@@ -67,6 +68,7 @@ export function Sidebar() {
     >
       <VStack spacing={1} align="stretch" px={2}>
         <NavItem to="/dashboard" icon={FiHome} label="Dashboard" />
+        <NavItem to="/catalog" icon={FiFolder} label="Catalog" />
         <NavItem to="/programs" icon={FiCode} label="Programs" />
         <NavItem to="/credentials" icon={FiKey} label="Credentials" />
         <NavItem to="/models" icon={FiCpu} label="Models" />
