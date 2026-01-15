@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { Run, CreateRunRequest } from '@/types';
+import type { Run, CreateRunRequest, RunExecutionStatus } from '@/types';
 
 interface RunResponse {
   run: Run;
@@ -14,6 +14,11 @@ interface BulkDeleteResponse {
   results: Record<string, boolean | string>;
   deletedCount: number;
   failedCount: number;
+}
+
+interface ListRunsParams {
+  programId?: string;
+  status?: RunExecutionStatus;
 }
 
 export const runsApi = {
@@ -34,18 +39,25 @@ export const runsApi = {
   },
 
   /**
-   * List runs for a program
+   * List runs with optional filters
    */
-  listByProgram: async (programId: string): Promise<Run[]> => {
+  list: async (params?: ListRunsParams): Promise<Run[]> => {
     try {
       const response = await apiClient.get<RunsListResponse>('/runs', {
-        params: { programId },
+        params: params,
       });
       return response.data.runs;
     } catch {
       console.warn('List runs endpoint not available, returning empty array');
       return [];
     }
+  },
+
+  /**
+   * List runs for a program
+   */
+  listByProgram: async (programId: string): Promise<Run[]> => {
+    return runsApi.list({ programId });
   },
 
   /**
