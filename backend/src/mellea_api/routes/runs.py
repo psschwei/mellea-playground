@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
@@ -443,3 +444,33 @@ async def stream_run_logs_sse(
                 break
 
     return EventSourceResponse(event_generator())
+
+
+@router.get("/{run_id}/logs/download")
+async def download_run_logs(
+    run_id: str,
+    current_user: CurrentUser,
+    run_service: RunServiceDep,
+) -> PlainTextResponse:
+    """Download run logs as a plain text file.
+
+    Returns the complete output from the run as a downloadable text file.
+    The filename includes the run ID for easy identification.
+    """
+    run = run_service.get_run(run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run not found: {run_id}",
+        )
+
+    # Get the log content, defaulting to empty string if no output
+    content = run.output or ""
+
+    return PlainTextResponse(
+        content=content,
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": f'attachment; filename="run-{run_id}.log"',
+        },
+    )

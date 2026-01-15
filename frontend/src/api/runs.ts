@@ -74,4 +74,24 @@ export const runsApi = {
     // Return latest state on timeout
     return runsApi.get(id);
   },
+
+  /**
+   * Download run logs as a text file
+   */
+  downloadLogs: async (id: string): Promise<void> => {
+    const response = await apiClient.get(`/runs/${id}/logs/download`, {
+      responseType: 'blob',
+    });
+
+    // Create download link and trigger download
+    const blob = new Blob([response.data], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `run-${id}.log`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
 };

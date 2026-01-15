@@ -16,6 +16,7 @@ import {
 import {
   FiChevronDown,
   FiChevronUp,
+  FiDownload,
   FiTerminal,
   FiWifi,
   FiWifiOff,
@@ -23,6 +24,7 @@ import {
 } from 'react-icons/fi';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLogStream, LogStreamStatus } from '@/hooks';
+import { runsApi } from '@/api/runs';
 
 interface LogViewerProps {
   runId: string | null | undefined;
@@ -56,6 +58,7 @@ export function LogViewer({
 }: LogViewerProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [isDownloading, setIsDownloading] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
 
   const bg = useColorModeValue('white', 'gray.800');
@@ -84,6 +87,19 @@ export function LogViewer({
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
     setAutoScroll(isAtBottom);
   }, []);
+
+  // Handle log download
+  const handleDownload = useCallback(async () => {
+    if (!runId) return;
+    setIsDownloading(true);
+    try {
+      await runsApi.downloadLogs(runId);
+    } catch (err) {
+      console.error('Failed to download logs:', err);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [runId]);
 
   if (!runId) {
     return (
@@ -124,6 +140,15 @@ export function LogViewer({
                 onClick={connect}
               />
             )}
+            <IconButton
+              aria-label="Download logs"
+              icon={isDownloading ? <Spinner size="xs" /> : <FiDownload />}
+              size="xs"
+              variant="ghost"
+              onClick={handleDownload}
+              isDisabled={isDownloading || !logs}
+              title="Download logs"
+            />
             {isMinimizable && (
               <IconButton
                 aria-label={isExpanded ? 'Minimize' : 'Expand'}
