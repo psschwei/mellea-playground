@@ -331,6 +331,99 @@ class TestCancelRun:
         assert data["run"]["status"] == "cancelled"
 
 
+class TestCreateRunBuildStatusValidation:
+    """Tests for build status validation when creating runs."""
+
+    def test_create_run_program_image_building(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test creating a run for a program with image still building returns 400."""
+        # Create a program with imageTag set but status still BUILDING
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "program",
+                "name": "Building Program",
+                "entrypoint": "main.py",
+                "projectRoot": "workspaces/building",
+                "dependencies": {"source": "requirements"},
+                "imageTag": "mellea-test:building",
+                "imageBuildStatus": "building",  # Still building
+            },
+        )
+        assert create_response.status_code == 201
+        program_id = create_response.json()["asset"]["id"]
+
+        # Try to create run
+        response = client.post(
+            "/api/v1/runs",
+            headers=auth_headers,
+            json={"programId": program_id},
+        )
+        assert response.status_code == 400
+        assert "still building" in response.json()["detail"].lower()
+
+    def test_create_run_program_image_build_failed(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test creating a run for a program with failed image build returns 400."""
+        # Create a program with imageTag set but status FAILED
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "program",
+                "name": "Failed Build Program",
+                "entrypoint": "main.py",
+                "projectRoot": "workspaces/failed",
+                "dependencies": {"source": "requirements"},
+                "imageTag": "mellea-test:failed",
+                "imageBuildStatus": "failed",  # Build failed
+            },
+        )
+        assert create_response.status_code == 201
+        program_id = create_response.json()["asset"]["id"]
+
+        # Try to create run
+        response = client.post(
+            "/api/v1/runs",
+            headers=auth_headers,
+            json={"programId": program_id},
+        )
+        assert response.status_code == 400
+        assert "failed" in response.json()["detail"].lower()
+
+    def test_create_run_program_image_ready(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test creating a run for a program with ready image succeeds."""
+        # Create a program with imageTag and status READY
+        create_response = client.post(
+            "/api/v1/assets",
+            headers=auth_headers,
+            json={
+                "type": "program",
+                "name": "Ready Program",
+                "entrypoint": "main.py",
+                "projectRoot": "workspaces/ready",
+                "dependencies": {"source": "requirements"},
+                "imageTag": "mellea-test:ready",
+                "imageBuildStatus": "ready",  # Build complete
+            },
+        )
+        assert create_response.status_code == 201
+        program_id = create_response.json()["asset"]["id"]
+
+        # Create run should succeed
+        response = client.post(
+            "/api/v1/runs",
+            headers=auth_headers,
+            json={"programId": program_id},
+        )
+        assert response.status_code == 201
+
+
 class TestCreateRunWithCredentials:
     """Tests for credential validation when creating runs."""
 

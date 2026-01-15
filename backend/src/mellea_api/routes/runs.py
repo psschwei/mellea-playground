@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from mellea_api.core.deps import CurrentUser
-from mellea_api.models.common import RunExecutionStatus
+from mellea_api.models.common import ImageBuildStatus, RunExecutionStatus
 from mellea_api.models.run import Run
 from mellea_api.services.assets import AssetService, get_asset_service
 from mellea_api.services.credentials import CredentialService, get_credential_service
@@ -86,11 +86,24 @@ async def create_run(
             detail=f"Program not found: {request.program_id}",
         )
 
-    # Check if program has a built image
+    # Check if program has a built image that is ready
     if program.image_tag is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Program does not have a built container image. Build the image first.",
+        )
+
+    # Verify build is complete (not still building)
+    if program.image_build_status == ImageBuildStatus.BUILDING:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Program image is still building. Wait for the build to complete before creating a run.",
+        )
+
+    if program.image_build_status == ImageBuildStatus.FAILED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Program image build failed. Rebuild the image before creating a run.",
         )
 
     # Validate all credentials exist and are not expired
