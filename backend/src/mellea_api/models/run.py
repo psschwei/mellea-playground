@@ -18,6 +18,7 @@ VALID_RUN_TRANSITIONS: dict[RunExecutionStatus, set[RunExecutionStatus]] = {
     RunExecutionStatus.QUEUED: {RunExecutionStatus.STARTING, RunExecutionStatus.CANCELLED},
     RunExecutionStatus.STARTING: {
         RunExecutionStatus.RUNNING,
+        RunExecutionStatus.SUCCEEDED,  # Jobs can complete before being observed as RUNNING
         RunExecutionStatus.FAILED,
         RunExecutionStatus.CANCELLED,
     },

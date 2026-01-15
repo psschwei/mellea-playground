@@ -108,9 +108,9 @@ class TestStateTransitions:
         """Test STARTING -> FAILED is valid."""
         assert can_transition(RunExecutionStatus.STARTING, RunExecutionStatus.FAILED)
 
-    def test_starting_cannot_transition_to_succeeded(self):
-        """Test STARTING -> SUCCEEDED is invalid (must go through RUNNING)."""
-        assert not can_transition(RunExecutionStatus.STARTING, RunExecutionStatus.SUCCEEDED)
+    def test_starting_can_transition_to_succeeded(self):
+        """Test STARTING -> SUCCEEDED is valid (fast jobs may complete before being observed as RUNNING)."""
+        assert can_transition(RunExecutionStatus.STARTING, RunExecutionStatus.SUCCEEDED)
 
     def test_running_can_transition_to_succeeded(self):
         """Test RUNNING -> SUCCEEDED is valid."""
