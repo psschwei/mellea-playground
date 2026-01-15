@@ -26,6 +26,7 @@ from mellea_api.services.environment_builder import (
 from mellea_api.services.log import LogService, get_log_service
 from mellea_api.services.run import (
     InvalidRunStateTransitionError,
+    RunNotDeletableError,
     RunNotFoundError,
     RunService,
     get_run_service,
@@ -70,6 +71,28 @@ class RunsListResponse(BaseModel):
 
     runs: list[Run]
     total: int
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request body for bulk delete operation."""
+
+    run_ids: list[str] = Field(alias="runIds", description="List of run IDs to delete")
+
+    class Config:
+        populate_by_name = True
+
+
+class BulkDeleteResponse(BaseModel):
+    """Response for bulk delete operation."""
+
+    results: dict[str, bool | str] = Field(
+        description="Map of run_id to result (True for success, error message for failure)"
+    )
+    deleted_count: int = Field(alias="deletedCount", description="Number of runs successfully deleted")
+    failed_count: int = Field(alias="failedCount", description="Number of runs that failed to delete")
+
+    class Config:
+        populate_by_name = True
 
 
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
@@ -240,6 +263,55 @@ async def get_run(
         )
 
     return RunResponse(run=run)
+
+
+@router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_run(
+    run_id: str,
+    current_user: CurrentUser,
+    run_service: RunServiceDep,
+) -> None:
+    """Delete a run by ID.
+
+    Only runs in terminal states (succeeded, failed, cancelled) can be deleted.
+    This will permanently remove the run record and any associated logs.
+    """
+    try:
+        run_service.delete_run(run_id)
+    except RunNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run not found: {run_id}",
+        ) from e
+    except RunNotDeletableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
+@router.post("/bulk-delete", response_model=BulkDeleteResponse)
+async def bulk_delete_runs(
+    request: BulkDeleteRequest,
+    current_user: CurrentUser,
+    run_service: RunServiceDep,
+) -> BulkDeleteResponse:
+    """Delete multiple runs at once.
+
+    Only runs in terminal states (succeeded, failed, cancelled) can be deleted.
+    The operation continues even if some deletions fail.
+
+    Returns detailed results for each run ID, indicating success or the reason for failure.
+    """
+    results = run_service.delete_runs(request.run_ids)
+    deleted_count = sum(1 for v in results.values() if v is True)
+    failed_count = len(results) - deleted_count
+
+    return BulkDeleteResponse(
+        results=results,
+        deletedCount=deleted_count,
+        failedCount=failed_count,
+    )
 
 
 @router.post("/{run_id}/cancel", response_model=RunResponse)

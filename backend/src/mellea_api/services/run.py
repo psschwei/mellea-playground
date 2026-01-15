@@ -23,6 +23,12 @@ class InvalidRunStateTransitionError(Exception):
     pass
 
 
+class RunNotDeletableError(Exception):
+    """Raised when a run cannot be deleted due to its current state."""
+
+    pass
+
+
 class RunService:
     """Service for managing program execution lifecycle.
 
@@ -402,6 +408,67 @@ class RunService:
             output_path=output_path,
             output=output,
         )
+
+    # -------------------------------------------------------------------------
+    # Delete Operations
+    # -------------------------------------------------------------------------
+
+    def delete_run(self, run_id: str) -> bool:
+        """Delete a run by ID.
+
+        Only runs in terminal states (SUCCEEDED, FAILED, CANCELLED) can be deleted.
+
+        Args:
+            run_id: Run's unique identifier
+
+        Returns:
+            True if deletion was successful
+
+        Raises:
+            RunNotFoundError: If run doesn't exist
+            RunNotDeletableError: If run is not in a terminal state
+        """
+        run = self.run_store.get_by_id(run_id)
+        if run is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+
+        if not run.is_terminal():
+            raise RunNotDeletableError(
+                f"Cannot delete run {run_id} in status {run.status.value}. "
+                "Only runs in terminal states (succeeded, failed, cancelled) can be deleted."
+            )
+
+        deleted = self.run_store.delete(run_id)
+        if deleted:
+            logger.info(f"Deleted run {run_id}")
+        return deleted
+
+    def delete_runs(self, run_ids: list[str]) -> dict[str, bool | str]:
+        """Delete multiple runs by ID.
+
+        Only runs in terminal states (SUCCEEDED, FAILED, CANCELLED) can be deleted.
+        Continues processing even if some deletions fail.
+
+        Args:
+            run_ids: List of run IDs to delete
+
+        Returns:
+            Dictionary mapping run_id to result:
+            - True: Successfully deleted
+            - str: Error message if deletion failed
+        """
+        results: dict[str, bool | str] = {}
+
+        for run_id in run_ids:
+            try:
+                self.delete_run(run_id)
+                results[run_id] = True
+            except RunNotFoundError:
+                results[run_id] = "Run not found"
+            except RunNotDeletableError as e:
+                results[run_id] = str(e)
+
+        return results
 
 
 # Global service instance

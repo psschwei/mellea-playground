@@ -32,8 +32,15 @@ import {
   AlertDialogContent,
   AlertDialogOverlay,
   Divider,
+  Checkbox,
+  Tooltip,
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiPlay, FiClock, FiTrash2 } from 'react-icons/fi';
+
+// Helper to check if a run can be deleted (must be in terminal state)
+function isTerminalStatus(status: string): boolean {
+  return status === 'succeeded' || status === 'failed' || status === 'cancelled';
+}
 import { CodeViewer } from '@/components/Programs';
 import { RunPanel, RunStatusBadge, LogViewer } from '@/components/Runs';
 import { programsApi, runsApi } from '@/api';
@@ -62,12 +69,27 @@ export function ProgramDetailPage() {
   const [isBuilding, setIsBuilding] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeletingRuns, setIsDeletingRuns] = useState(false);
+  const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
+  const [runToDelete, setRunToDelete] = useState<Run | null>(null);
   const {
     isOpen: isDeleteOpen,
     onOpen: onDeleteOpen,
     onClose: onDeleteClose,
   } = useDisclosure();
+  const {
+    isOpen: isDeleteRunOpen,
+    onOpen: onDeleteRunOpen,
+    onClose: onDeleteRunClose,
+  } = useDisclosure();
+  const {
+    isOpen: isBulkDeleteOpen,
+    onOpen: onBulkDeleteOpen,
+    onClose: onBulkDeleteClose,
+  } = useDisclosure();
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const cancelRunRef = useRef<HTMLButtonElement>(null);
+  const cancelBulkRef = useRef<HTMLButtonElement>(null);
 
   // Poll for updates when viewing an active run
   useEffect(() => {
@@ -297,6 +319,118 @@ export function ProgramDetailPage() {
     }
   };
 
+  const handleDeleteRun = (run: Run, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent row click from selecting the run
+    setRunToDelete(run);
+    onDeleteRunOpen();
+  };
+
+  const handleDeleteRunConfirm = async () => {
+    if (!runToDelete) return;
+
+    setIsDeletingRuns(true);
+    try {
+      await runsApi.delete(runToDelete.id);
+      toast({
+        title: 'Run deleted',
+        status: 'success',
+        duration: 3000,
+      });
+      // Clear current run if it was the deleted one
+      if (currentRun?.id === runToDelete.id) {
+        setCurrentRun(null);
+      }
+      // Remove from selection
+      setSelectedRunIds((prev) => {
+        const next = new Set(prev);
+        next.delete(runToDelete.id);
+        return next;
+      });
+      loadRuns();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to delete run';
+      toast({
+        title: 'Error',
+        description: message,
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsDeletingRuns(false);
+      setRunToDelete(null);
+      onDeleteRunClose();
+    }
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    if (selectedRunIds.size === 0) return;
+
+    setIsDeletingRuns(true);
+    try {
+      const result = await runsApi.bulkDelete(Array.from(selectedRunIds));
+
+      if (result.failedCount > 0) {
+        toast({
+          title: `Deleted ${result.deletedCount} run(s)`,
+          description: `${result.failedCount} run(s) could not be deleted`,
+          status: 'warning',
+          duration: 5000,
+        });
+      } else {
+        toast({
+          title: `Deleted ${result.deletedCount} run(s)`,
+          status: 'success',
+          duration: 3000,
+        });
+      }
+
+      // Clear current run if it was deleted
+      if (currentRun && selectedRunIds.has(currentRun.id)) {
+        setCurrentRun(null);
+      }
+
+      setSelectedRunIds(new Set());
+      loadRuns();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to delete runs';
+      toast({
+        title: 'Error',
+        description: message,
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsDeletingRuns(false);
+      onBulkDeleteClose();
+    }
+  };
+
+  const toggleRunSelection = (runId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedRunIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(runId)) {
+        next.delete(runId);
+      } else {
+        next.add(runId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const deletableRuns = runs.filter((r) => isTerminalStatus(r.status));
+    if (selectedRunIds.size === deletableRuns.length) {
+      setSelectedRunIds(new Set());
+    } else {
+      setSelectedRunIds(new Set(deletableRuns.map((r) => r.id)));
+    }
+  };
+
+  // Count of deletable runs (in terminal state)
+  const deletableRunsCount = runs.filter((r) => isTerminalStatus(r.status)).length;
+  const allDeletableSelected = deletableRunsCount > 0 && selectedRunIds.size === deletableRunsCount;
+
   if (isLoading) {
     return (
       <Center h="300px">
@@ -416,38 +550,94 @@ export function ProgramDetailPage() {
                 </VStack>
               </Center>
             ) : (
-              <TableContainer>
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>Run ID</Th>
-                      <Th>Status</Th>
-                      <Th>Started</Th>
-                      <Th>Duration</Th>
-                      <Th>Exit Code</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {runs.map((run) => (
-                      <Tr
-                        key={run.id}
-                        _hover={{ bg: 'gray.50', cursor: 'pointer' }}
-                        onClick={() => setCurrentRun(run)}
-                      >
-                        <Td fontFamily="mono" fontSize="xs">
-                          {run.id.slice(0, 8)}...
-                        </Td>
-                        <Td>
-                          <RunStatusBadge status={run.status} size="sm" />
-                        </Td>
-                        <Td>{formatDate(run.startedAt)}</Td>
-                        <Td>{formatDuration(run.metrics?.totalDurationMs)}</Td>
-                        <Td>{run.exitCode ?? '-'}</Td>
+              <VStack align="stretch" spacing={4}>
+                {/* Bulk actions bar */}
+                {selectedRunIds.size > 0 && (
+                  <HStack bg="gray.50" p={2} borderRadius="md" justify="space-between">
+                    <Text fontSize="sm" color="gray.600">
+                      {selectedRunIds.size} run{selectedRunIds.size !== 1 ? 's' : ''} selected
+                    </Text>
+                    <Button
+                      size="sm"
+                      colorScheme="red"
+                      variant="ghost"
+                      leftIcon={<FiTrash2 />}
+                      onClick={onBulkDeleteOpen}
+                    >
+                      Delete selected
+                    </Button>
+                  </HStack>
+                )}
+                <TableContainer>
+                  <Table variant="simple" size="sm">
+                    <Thead>
+                      <Tr>
+                        <Th w="40px">
+                          <Tooltip label={allDeletableSelected ? 'Deselect all' : 'Select all deletable runs'}>
+                            <Checkbox
+                              isChecked={allDeletableSelected}
+                              isIndeterminate={selectedRunIds.size > 0 && !allDeletableSelected}
+                              onChange={toggleSelectAll}
+                              isDisabled={deletableRunsCount === 0}
+                            />
+                          </Tooltip>
+                        </Th>
+                        <Th>Run ID</Th>
+                        <Th>Status</Th>
+                        <Th>Started</Th>
+                        <Th>Duration</Th>
+                        <Th>Exit Code</Th>
+                        <Th w="60px">Actions</Th>
                       </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </TableContainer>
+                    </Thead>
+                    <Tbody>
+                      {runs.map((run) => {
+                        const canDelete = isTerminalStatus(run.status);
+                        return (
+                          <Tr
+                            key={run.id}
+                            _hover={{ bg: 'gray.50', cursor: 'pointer' }}
+                            onClick={() => setCurrentRun(run)}
+                            bg={selectedRunIds.has(run.id) ? 'blue.50' : undefined}
+                          >
+                            <Td onClick={(e) => e.stopPropagation()}>
+                              <Tooltip label={canDelete ? 'Select for deletion' : 'Cannot delete active runs'}>
+                                <Checkbox
+                                  isChecked={selectedRunIds.has(run.id)}
+                                  onChange={(e) => toggleRunSelection(run.id, e as unknown as React.MouseEvent)}
+                                  isDisabled={!canDelete}
+                                />
+                              </Tooltip>
+                            </Td>
+                            <Td fontFamily="mono" fontSize="xs">
+                              {run.id.slice(0, 8)}...
+                            </Td>
+                            <Td>
+                              <RunStatusBadge status={run.status} size="sm" />
+                            </Td>
+                            <Td>{formatDate(run.startedAt)}</Td>
+                            <Td>{formatDuration(run.metrics?.totalDurationMs)}</Td>
+                            <Td>{run.exitCode ?? '-'}</Td>
+                            <Td>
+                              <Tooltip label={canDelete ? 'Delete run' : 'Cannot delete active runs'}>
+                                <IconButton
+                                  aria-label="Delete run"
+                                  icon={<FiTrash2 />}
+                                  size="xs"
+                                  variant="ghost"
+                                  colorScheme="red"
+                                  isDisabled={!canDelete}
+                                  onClick={(e) => handleDeleteRun(run, e)}
+                                />
+                              </Tooltip>
+                            </Td>
+                          </Tr>
+                        );
+                      })}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+              </VStack>
             )}
           </TabPanel>
 
@@ -515,6 +705,7 @@ export function ProgramDetailPage() {
         </TabPanels>
       </Tabs>
 
+      {/* Delete Program Dialog */}
       <AlertDialog
         isOpen={isDeleteOpen}
         leastDestructiveRef={cancelRef}
@@ -549,6 +740,83 @@ export function ProgramDetailPage() {
                 isLoading={isDeleting}
               >
                 Delete
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
+
+      {/* Delete Single Run Dialog */}
+      <AlertDialog
+        isOpen={isDeleteRunOpen}
+        leastDestructiveRef={cancelRunRef}
+        onClose={onDeleteRunClose}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Delete Run
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              Are you sure you want to delete this run?
+              {runToDelete && (
+                <Text mt={2} fontFamily="mono" fontSize="sm" color="gray.600">
+                  Run ID: {runToDelete.id}
+                </Text>
+              )}
+              <Text mt={2} color="gray.500">
+                This will permanently remove the run and its logs. This action cannot be undone.
+              </Text>
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={cancelRunRef} onClick={onDeleteRunClose}>
+                Cancel
+              </Button>
+              <Button
+                colorScheme="red"
+                onClick={handleDeleteRunConfirm}
+                ml={3}
+                isLoading={isDeletingRuns}
+              >
+                Delete
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
+
+      {/* Bulk Delete Runs Dialog */}
+      <AlertDialog
+        isOpen={isBulkDeleteOpen}
+        leastDestructiveRef={cancelBulkRef}
+        onClose={onBulkDeleteClose}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Delete {selectedRunIds.size} Run{selectedRunIds.size !== 1 ? 's' : ''}
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              Are you sure you want to delete {selectedRunIds.size} run{selectedRunIds.size !== 1 ? 's' : ''}?
+              <Text mt={2} color="gray.500">
+                This will permanently remove the selected runs and their logs. This action cannot be undone.
+              </Text>
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={cancelBulkRef} onClick={onBulkDeleteClose}>
+                Cancel
+              </Button>
+              <Button
+                colorScheme="red"
+                onClick={handleBulkDeleteConfirm}
+                ml={3}
+                isLoading={isDeletingRuns}
+              >
+                Delete {selectedRunIds.size} Run{selectedRunIds.size !== 1 ? 's' : ''}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>

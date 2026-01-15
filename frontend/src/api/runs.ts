@@ -10,6 +10,12 @@ interface RunsListResponse {
   total: number;
 }
 
+interface BulkDeleteResponse {
+  results: Record<string, boolean | string>;
+  deletedCount: number;
+  failedCount: number;
+}
+
 export const runsApi = {
   /**
    * Create and start a new run
@@ -93,5 +99,25 @@ export const runsApi = {
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * Delete a run by ID
+   * Only works for runs in terminal states (succeeded, failed, cancelled)
+   */
+  delete: async (id: string): Promise<void> => {
+    await apiClient.delete(`/runs/${id}`);
+  },
+
+  /**
+   * Delete multiple runs at once
+   * Only runs in terminal states can be deleted
+   * Returns results for each run
+   */
+  bulkDelete: async (runIds: string[]): Promise<BulkDeleteResponse> => {
+    const response = await apiClient.post<BulkDeleteResponse>('/runs/bulk-delete', {
+      runIds,
+    });
+    return response.data;
   },
 };
