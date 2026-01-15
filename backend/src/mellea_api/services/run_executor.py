@@ -7,12 +7,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from mellea_api.core.config import Settings, get_settings
-from mellea_api.models.common import RunExecutionStatus
+from mellea_api.models.assets import ProgramAsset
+from mellea_api.models.build import BuildJobStatus
+from mellea_api.models.common import ImageBuildStatus, RunExecutionStatus
 from mellea_api.models.k8s import JobInfo, JobStatus
 from mellea_api.models.run import Run
+from mellea_api.services.assets import AssetService, get_asset_service
 from mellea_api.services.credentials import CredentialService, get_credential_service
 from mellea_api.services.environment import EnvironmentService, get_environment_service
 from mellea_api.services.k8s_jobs import K8sJobService, get_k8s_job_service
+from mellea_api.services.kaniko_builder import KanikoBuildService, get_kaniko_build_service
 from mellea_api.services.run import RunNotFoundError, RunService, get_run_service
 
 logger = logging.getLogger(__name__)
@@ -32,6 +36,18 @@ class ProgramNotFoundError(Exception):
 
 class CredentialValidationError(Exception):
     """Raised when credential validation fails before run submission."""
+
+    pass
+
+
+class BuildInProgressError(Exception):
+    """Raised when trying to submit a run while the build is still in progress."""
+
+    pass
+
+
+class BuildFailedError(Exception):
+    """Raised when trying to submit a run but the build has failed."""
 
     pass
 
@@ -396,6 +412,8 @@ class RunExecutorController:
         settings: Settings | None = None,
         run_executor: "RunExecutor | None" = None,
         run_service: RunService | None = None,
+        asset_service: AssetService | None = None,
+        kaniko_service: KanikoBuildService | None = None,
     ) -> None:
         """Initialize the controller.
 
@@ -403,10 +421,14 @@ class RunExecutorController:
             settings: Application settings (uses default if not provided)
             run_executor: Optional RunExecutor instance
             run_service: Optional RunService instance
+            asset_service: Optional AssetService instance
+            kaniko_service: Optional KanikoBuildService instance
         """
         self.settings = settings or get_settings()
         self._run_executor = run_executor
         self._run_service = run_service
+        self._asset_service = asset_service
+        self._kaniko_service = kaniko_service
         self._task: asyncio.Task | None = None
         self._running = False
         self._last_metrics: ExecutorMetrics | None = None
@@ -426,9 +448,62 @@ class RunExecutorController:
         return self._run_service
 
     @property
+    def asset_service(self) -> AssetService:
+        """Get the asset service instance."""
+        if self._asset_service is None:
+            self._asset_service = get_asset_service()
+        return self._asset_service
+
+    @property
+    def kaniko_service(self) -> KanikoBuildService:
+        """Get the kaniko build service instance."""
+        if self._kaniko_service is None:
+            self._kaniko_service = get_kaniko_build_service()
+        return self._kaniko_service
+
+    @property
     def is_running(self) -> bool:
         """Check if the controller is running."""
         return self._running and self._task is not None
+
+    def _sync_build_status(self, program: "ProgramAsset") -> "ProgramAsset":
+        """Sync a program's build status from its Kaniko job.
+
+        Checks the Kaniko build job status and updates the program's
+        image_build_status if the build has completed.
+
+        Args:
+            program: The program to sync build status for
+
+        Returns:
+            Updated program (may be same object if no changes)
+        """
+        job_name = f"mellea-build-{program.id[:8].lower()}"
+
+        try:
+            build = self.kaniko_service.get_build_status(job_name)
+
+            if build.status == BuildJobStatus.SUCCEEDED:
+                program.image_build_status = ImageBuildStatus.READY
+                program.image_build_error = None
+                self.asset_service.update_program(program.id, program)
+                logger.info("Build completed for program %s", program.id)
+            elif build.status == BuildJobStatus.FAILED:
+                program.image_build_status = ImageBuildStatus.FAILED
+                program.image_build_error = build.error_message
+                self.asset_service.update_program(program.id, program)
+                logger.error(
+                    "Build failed for program %s: %s", program.id, build.error_message
+                )
+            # If still PENDING or RUNNING, leave status as BUILDING
+
+        except RuntimeError as e:
+            # Job not found - might be cleaned up or never existed
+            logger.warning(
+                "Could not get build status for program %s: %s", program.id, e
+            )
+
+        return program
 
     async def run_cycle(self) -> ExecutorMetrics:
         """Run a single processing cycle.
@@ -443,12 +518,51 @@ class RunExecutorController:
         start_time = datetime.utcnow()
         metrics = ExecutorMetrics(timestamp=start_time)
 
-        # 1. Submit queued runs
+        # 1. Submit queued runs (checking build status first)
         queued_runs = self.run_service.list_runs(status=RunExecutionStatus.QUEUED)
         metrics.queued_runs_found = len(queued_runs)
 
         for run in queued_runs:
             try:
+                # Check if the program's build is ready before submitting
+                program = self.asset_service.get_program(run.program_id)
+                if program is None:
+                    raise ProgramNotFoundError(f"Program not found: {run.program_id}")
+
+                if program.image_build_status == ImageBuildStatus.BUILDING:
+                    # Build in progress - sync build status from Kaniko job
+                    program = self._sync_build_status(program)
+
+                    # Re-check after sync
+                    if program.image_build_status == ImageBuildStatus.BUILDING:
+                        # Still building - skip this run, try again next cycle
+                        logger.debug(
+                            "Run %s waiting for build to complete (program %s)",
+                            run.id,
+                            run.program_id,
+                        )
+                        continue
+
+                if program.image_build_status == ImageBuildStatus.FAILED:
+                    # Build failed - fail the run
+                    error_msg = program.image_build_error or "Build failed"
+                    logger.error(
+                        "Failing run %s because build failed: %s", run.id, error_msg
+                    )
+                    self.run_service.mark_failed(run.id, error=f"Build failed: {error_msg}")
+                    metrics.errors.append(f"Run {run.id} failed due to build failure")
+                    continue
+
+                if program.image_tag is None:
+                    # No image available - this shouldn't happen but handle gracefully
+                    logger.warning(
+                        "Run %s has no image_tag even though build status is %s",
+                        run.id,
+                        program.image_build_status,
+                    )
+                    continue
+
+                # Build is ready - submit the run
                 self.run_executor.submit_run(run.id)
                 metrics.runs_submitted += 1
                 logger.info("Submitted queued run %s", run.id)

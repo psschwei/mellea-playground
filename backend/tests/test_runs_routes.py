@@ -337,7 +337,10 @@ class TestCreateRunBuildStatusValidation:
     def test_create_run_program_image_building(
         self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
-        """Test creating a run for a program with image still building returns 400."""
+        """Test creating a run for a program with image still building succeeds.
+
+        Runs are queued and will wait for the build to complete before starting.
+        """
         # Create a program with imageTag set but status still BUILDING
         create_response = client.post(
             "/api/v1/assets",
@@ -355,14 +358,16 @@ class TestCreateRunBuildStatusValidation:
         assert create_response.status_code == 201
         program_id = create_response.json()["asset"]["id"]
 
-        # Try to create run
+        # Create run - should succeed and queue the run
         response = client.post(
             "/api/v1/runs",
             headers=auth_headers,
             json={"programId": program_id},
         )
-        assert response.status_code == 400
-        assert "still building" in response.json()["detail"].lower()
+        assert response.status_code == 201
+        run = response.json()["run"]
+        assert run["status"] == "queued"
+        assert run["programId"] == program_id
 
     def test_create_run_program_image_build_failed(
         self, client: TestClient, auth_headers: dict[str, str]

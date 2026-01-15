@@ -195,7 +195,7 @@ class TestKanikoJobSpec:
         assert "--dockerfile=/workspace/Dockerfile" in container.args
         assert "--context=dir:///workspace" in container.args
         assert "--destination=registry/image:tag" in container.args
-        assert "--cache=true" in container.args
+        assert "--cache=false" in container.args
 
     def test_build_kaniko_job_spec_volumes(self, kaniko_service: KanikoBuildService):
         """Test that volumes are correctly configured."""

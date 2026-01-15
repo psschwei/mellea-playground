@@ -14,6 +14,10 @@ from mellea_api.services.environment import (
     EnvironmentService,
     get_environment_service,
 )
+from mellea_api.services.environment_builder import (
+    EnvironmentBuilderService,
+    get_environment_builder_service,
+)
 from mellea_api.services.run import (
     InvalidRunStateTransitionError,
     RunNotFoundError,
@@ -27,6 +31,9 @@ RunExecutorDep = Annotated[RunExecutor, Depends(get_run_executor)]
 EnvironmentServiceDep = Annotated[EnvironmentService, Depends(get_environment_service)]
 AssetServiceDep = Annotated[AssetService, Depends(get_asset_service)]
 CredentialServiceDep = Annotated[CredentialService, Depends(get_credential_service)]
+EnvironmentBuilderServiceDep = Annotated[
+    EnvironmentBuilderService, Depends(get_environment_builder_service)
+]
 
 router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
 
@@ -66,12 +73,13 @@ async def create_run(
     asset_service: AssetServiceDep,
     env_service: EnvironmentServiceDep,
     credential_service: CredentialServiceDep,
+    builder_service: EnvironmentBuilderServiceDep,
 ) -> RunResponse:
     """Create a new run for a program.
 
-    This creates a run in QUEUED status. The program must exist and have a
-    built container image. An environment is automatically created or reused
-    for the run.
+    This creates a run in QUEUED status. If the program does not have a built
+    container image, a build is automatically triggered and the run will start
+    once the build completes.
 
     Optionally, credential IDs can be provided to inject secrets into the
     run container. All credentials must exist and be accessible.
@@ -86,25 +94,61 @@ async def create_run(
             detail=f"Program not found: {request.program_id}",
         )
 
-    # Check if program has a built image that is ready
-    if program.image_tag is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Program does not have a built container image. Build the image first.",
+    # Auto-trigger build if needed (no image, failed build, or pending)
+    needs_build = (
+        program.image_tag is None
+        or program.image_build_status == ImageBuildStatus.FAILED
+        or program.image_build_status == ImageBuildStatus.PENDING
+    )
+
+    if needs_build and program.image_build_status != ImageBuildStatus.BUILDING:
+        # Trigger a build
+        workspace_path = asset_service.settings.data_dir / "workspaces" / request.program_id
+
+        # Update status to building
+        program.image_build_status = ImageBuildStatus.BUILDING
+        program.image_build_error = None
+        asset_service.update_program(request.program_id, program)
+
+        # Start the build (runs asynchronously for Kaniko)
+        result = builder_service.build_image(
+            program=program,
+            workspace_path=workspace_path,
+            force_rebuild=False,
+            push=False,
         )
 
-    # Verify build is complete (not still building)
-    if program.image_build_status == ImageBuildStatus.BUILDING:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Program image is still building. Wait for the build to complete before creating a run.",
-        )
+        # Update program with build result (image_tag is set even for async builds)
+        if result.build_job_name:
+            # Async Kaniko build - update expected image tag
+            program.image_tag = result.image_tag
+            asset_service.update_program(request.program_id, program)
+        elif result.success:
+            # Sync Docker build completed
+            program.image_tag = result.image_tag
+            program.image_build_status = ImageBuildStatus.READY
+            asset_service.update_program(request.program_id, program)
+        else:
+            # Sync Docker build failed
+            program.image_build_status = ImageBuildStatus.FAILED
+            program.image_build_error = result.error_message
+            asset_service.update_program(request.program_id, program)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to build program image: {result.error_message}",
+            )
 
-    if program.image_build_status == ImageBuildStatus.FAILED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Program image build failed. Rebuild the image before creating a run.",
-        )
+        # Re-fetch program to get latest state
+        program = asset_service.get_program(request.program_id)
+        if program is None:
+            # This shouldn't happen, but handle gracefully
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Program not found after build: {request.program_id}",
+            )
+
+    # Run will be queued even if build is still in progress
+    # The executor will wait for the build to complete before submitting
 
     # Validate all credentials exist and are not expired
     for cred_id in request.credential_ids:
@@ -128,9 +172,11 @@ async def create_run(
         environment = ready_envs[0]
     else:
         # Create a new environment
+        # image_tag may be empty string if build is async and hasn't set it yet
+        # The executor will update the environment when the build completes
         environment = env_service.create_environment(
             program_id=request.program_id,
-            image_tag=program.image_tag,
+            image_tag=program.image_tag or "",
         )
         # Mark as ready (in real impl, this would happen after image is verified)
         environment = env_service.mark_ready(environment.id)
