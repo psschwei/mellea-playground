@@ -53,6 +53,8 @@ def environment_service(settings: Settings):
 def mock_k8s_service():
     """Create a mock K8sJobService."""
     mock = MagicMock(spec=K8sJobService)
+    # Default return value for get_pod_logs (no logs available)
+    mock.get_pod_logs.return_value = None
     return mock
 
 

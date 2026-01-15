@@ -275,23 +275,33 @@ class RunExecutor:
             )
             return run
 
-        # No change needed
+        # Fetch pod logs if available
+        output = None
+        if run.job_name:
+            output = self.k8s_service.get_pod_logs(run.job_name)
+
+        # No status change needed - but still update output if we have it
         if current_status == target_status:
+            if output and output != run.output:
+                # Update output without changing status
+                return self.run_service.update_output(run.id, output)
             return run
 
         # Update based on target status
         if target_status == RunExecutionStatus.RUNNING:
-            return self.run_service.mark_running(run.id)
+            return self.run_service.mark_running(run.id, output=output)
         elif target_status == RunExecutionStatus.SUCCEEDED:
             return self.run_service.mark_succeeded(
                 run.id,
                 exit_code=job_info.exit_code or 0,
+                output=output,
             )
         elif target_status == RunExecutionStatus.FAILED:
             return self.run_service.mark_failed(
                 run.id,
                 exit_code=job_info.exit_code,
                 error=job_info.error_message,
+                output=output,
             )
 
         # For STARTING status (from PENDING job), no update needed

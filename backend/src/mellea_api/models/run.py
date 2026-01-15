@@ -87,6 +87,7 @@ class Run(BaseModel):
     started_at: datetime | None = Field(default=None, alias="startedAt")
     completed_at: datetime | None = Field(default=None, alias="completedAt")
     output_path: str | None = Field(default=None, alias="outputPath")
+    output: str | None = Field(default=None, description="Program stdout/stderr output")
     credential_ids: list[str] = Field(default_factory=list, alias="credentialIds")
 
     class Config:

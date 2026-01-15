@@ -348,6 +348,56 @@ class K8sJobService:
             errorMessage=error_message,
         )
 
+    def get_pod_logs(
+        self,
+        job_name: str,
+        namespace: str = RUNS_NAMESPACE,
+        tail_lines: int | None = None,
+    ) -> str | None:
+        """Get logs from the pod associated with a job.
+
+        Args:
+            job_name: Name of the job
+            namespace: Kubernetes namespace (default: mellea-runs)
+            tail_lines: Number of lines to return from the end (None = all logs)
+
+        Returns:
+            Pod logs as a string, or None if pod not found or logs unavailable
+        """
+        try:
+            # Find the pod for this job
+            pods = self.core_api.list_namespaced_pod(
+                namespace=namespace,
+                label_selector=f"job-name={job_name}",
+            )
+            if not pods.items:
+                logger.debug("No pods found for job %s", job_name)
+                return None
+
+            pod = pods.items[0]
+            pod_name = pod.metadata.name
+
+            # Check if the pod has started running (has container status)
+            if not pod.status or not pod.status.container_statuses:
+                logger.debug("Pod %s has no container status yet", pod_name)
+                return None
+
+            # Get logs from the pod
+            logs = self.core_api.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=namespace,
+                container="program",
+                tail_lines=tail_lines,
+            )
+            return logs
+
+        except ApiException as e:
+            if e.status == 404:
+                logger.debug("Pod not found for job %s", job_name)
+            else:
+                logger.warning("Failed to get logs for job %s: %s", job_name, e)
+            return None
+
     def _determine_job_status(self, job: V1Job) -> JobStatus:
         """Determine the JobStatus from a V1Job object."""
         if not job.status:

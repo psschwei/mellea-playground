@@ -198,6 +198,7 @@ class RunService:
         exit_code: int | None = None,
         error: str | None = None,
         output_path: str | None = None,
+        output: str | None = None,
     ) -> Run:
         """Update a run's status with state machine validation.
 
@@ -208,6 +209,7 @@ class RunService:
             exit_code: Exit code (set when transitioning to SUCCEEDED/FAILED)
             error: Error message (set when transitioning to FAILED)
             output_path: Path to output files
+            output: Program stdout/stderr output
 
         Returns:
             Updated Run
@@ -235,6 +237,9 @@ class RunService:
 
         if output_path is not None:
             run.output_path = output_path
+
+        if output is not None:
+            run.output = output
 
         # Update timestamps based on transition
         if status == RunExecutionStatus.RUNNING:
@@ -301,24 +306,50 @@ class RunService:
 
         return self.update_status(run_id, RunExecutionStatus.CANCELLED)
 
-    def mark_running(self, run_id: str) -> Run:
+    def mark_running(self, run_id: str, output: str | None = None) -> Run:
         """Mark a run as running.
 
         Convenience method for STARTING -> RUNNING transition.
 
         Args:
             run_id: Run's unique identifier
+            output: Optional initial output from the program
 
         Returns:
             Updated Run in RUNNING status
         """
-        return self.update_status(run_id, RunExecutionStatus.RUNNING)
+        return self.update_status(run_id, RunExecutionStatus.RUNNING, output=output)
+
+    def update_output(self, run_id: str, output: str) -> Run:
+        """Update a run's output without changing status.
+
+        Args:
+            run_id: Run's unique identifier
+            output: Program stdout/stderr output
+
+        Returns:
+            Updated Run
+
+        Raises:
+            RunNotFoundError: If run doesn't exist
+        """
+        run = self.run_store.get_by_id(run_id)
+        if run is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+
+        run.output = output
+        updated = self.run_store.update(run_id, run)
+        if updated is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+
+        return updated
 
     def mark_succeeded(
         self,
         run_id: str,
         exit_code: int = 0,
         output_path: str | None = None,
+        output: str | None = None,
     ) -> Run:
         """Mark a run as succeeded.
 
@@ -328,6 +359,7 @@ class RunService:
             run_id: Run's unique identifier
             exit_code: Process exit code (default 0)
             output_path: Path to output files
+            output: Program stdout/stderr output
 
         Returns:
             Updated Run in SUCCEEDED status
@@ -337,6 +369,7 @@ class RunService:
             RunExecutionStatus.SUCCEEDED,
             exit_code=exit_code,
             output_path=output_path,
+            output=output,
         )
 
     def mark_failed(
@@ -345,6 +378,7 @@ class RunService:
         exit_code: int | None = None,
         error: str | None = None,
         output_path: str | None = None,
+        output: str | None = None,
     ) -> Run:
         """Mark a run as failed.
 
@@ -355,6 +389,7 @@ class RunService:
             exit_code: Process exit code
             error: Error message describing the failure
             output_path: Path to output files (may contain partial results)
+            output: Program stdout/stderr output
 
         Returns:
             Updated Run in FAILED status
@@ -365,6 +400,7 @@ class RunService:
             exit_code=exit_code,
             error=error,
             output_path=output_path,
+            output=output,
         )
 
 
