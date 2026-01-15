@@ -62,4 +62,4 @@ clean: ## Remove data directories (preserves cluster)
 clean-all: cluster-down clean ## Delete cluster and all data
 
 # Full setup
-spin-up-from-scratch: cluster-up build-all deploy ## Create cluster, build images, and deploy everything
+spin-up-from-scratch: cluster-down cluster-up build-all deploy ## Delete existing cluster, create new one, build images, and deploy
