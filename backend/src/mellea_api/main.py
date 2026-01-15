@@ -14,6 +14,7 @@ from mellea_api.routes import (
     auth_router,
     controller_router,
     credentials_router,
+    github_import_router,
     health_router,
     runs_router,
 )
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(assets_router)
     app.include_router(credentials_router)
+    app.include_router(github_import_router)
     app.include_router(runs_router)
     app.include_router(controller_router)
 

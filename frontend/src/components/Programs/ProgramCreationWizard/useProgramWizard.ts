@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useToast } from '@chakra-ui/react';
-import { programsApi } from '@/api';
+import { programsApi, githubImportApi } from '@/api';
 import type { ProgramAsset, CreateProgramRequest } from '@/types';
 import type { WizardStep, WizardFormData, StepErrors, UseWizardReturn } from './types';
 
@@ -81,6 +81,10 @@ export function useProgramWizard(options: UseProgramWizardOptions = {}): UseWiza
           newErrors.githubUrl = 'GitHub URL is required';
         } else if (!isValidGitHubUrl(data.github.url)) {
           newErrors.githubUrl = 'Please enter a valid GitHub repository URL';
+        } else if (!data.github.sessionId || !data.github.analysis) {
+          newErrors.githubUrl = 'Please analyze the repository first';
+        } else if (data.github.analysis.pythonProjects.length === 0) {
+          newErrors.githubUrl = 'No Python projects found in this repository';
         }
         break;
       case 'upload':
@@ -178,18 +182,36 @@ export function useProgramWizard(options: UseProgramWizardOptions = {}): UseWiza
 
     setIsSubmitting(true);
     try {
-      const sourceCode = await getFinalSourceCode();
+      let program: ProgramAsset;
 
-      const request: CreateProgramRequest = {
-        type: 'program',
-        name: data.name.trim(),
-        description: data.description.trim() || undefined,
-        entrypoint: data.entrypoint,
-        sourceCode,
-        tags: data.tags.length > 0 ? data.tags : undefined,
-      };
+      if (data.importSource === 'github' && data.github.sessionId) {
+        // Use GitHub import confirm API
+        const response = await githubImportApi.confirm({
+          sessionId: data.github.sessionId,
+          selectedPath: data.github.path || '.',
+          metadata: {
+            name: data.name.trim(),
+            description: data.description.trim() || undefined,
+            tags: data.tags.length > 0 ? data.tags : undefined,
+          },
+          entrypoint: data.entrypoint,
+        });
+        program = response.asset;
+      } else {
+        // Use standard program creation
+        const sourceCode = await getFinalSourceCode();
 
-      const program = await programsApi.create(request);
+        const request: CreateProgramRequest = {
+          type: 'program',
+          name: data.name.trim(),
+          description: data.description.trim() || undefined,
+          entrypoint: data.entrypoint,
+          sourceCode,
+          tags: data.tags.length > 0 ? data.tags : undefined,
+        };
+
+        program = await programsApi.create(request);
+      }
 
       toast({
         title: 'Program created',

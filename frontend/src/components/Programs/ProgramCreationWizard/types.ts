@@ -11,6 +11,24 @@ export interface GitHubImportData {
   url: string;
   branch?: string;
   path?: string;
+  // Analysis state
+  sessionId?: string;
+  isAnalyzing?: boolean;
+  analysisError?: string;
+  analysis?: GitHubAnalysisResult;
+}
+
+// GitHub analysis result (from backend)
+export interface GitHubAnalysisResult {
+  rootFiles: string[];
+  pythonProjects: {
+    path: string;
+    entrypoint: string | null;
+    confidence: number;
+    indicators: string[];
+  }[];
+  repoSize: number;
+  fileCount: number;
 }
 
 // Upload import data
