@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from mellea_api.core.security import decode_access_token
@@ -148,8 +148,79 @@ def require_role(minimum_role: UserRole):
     return role_checker
 
 
+async def get_current_user_sse(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    token: Annotated[str | None, Query()] = None,
+) -> User:
+    """Get the current authenticated user for SSE endpoints.
+
+    Supports both Authorization header and query parameter token for
+    EventSource compatibility (EventSource doesn't support custom headers).
+
+    Args:
+        credentials: HTTP Bearer credentials from the request
+        token: Optional token from query parameter (for SSE)
+
+    Returns:
+        The authenticated user
+
+    Raises:
+        HTTPException: 401 if token is missing, invalid, or user not found
+    """
+    # Try header first, then query param
+    raw_token = None
+    if credentials is not None:
+        raw_token = credentials.credentials
+    elif token is not None:
+        raw_token = token
+
+    if raw_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Decode the token
+    payload = decode_access_token(raw_token)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Get user from database
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    auth_service = get_auth_service()
+    user = auth_service.get_user_by_id(user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if user.status.value != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Account is {user.status.value}",
+        )
+
+    return user
+
+
 # Type aliases for common dependencies
 CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUserSSE = Annotated[User, Depends(get_current_user_sse)]
 OptionalUser = Annotated[User | None, Depends(get_current_user_optional)]
 AdminUser = Annotated[User, Depends(require_role(UserRole.ADMIN))]
 DeveloperUser = Annotated[User, Depends(require_role(UserRole.DEVELOPER))]

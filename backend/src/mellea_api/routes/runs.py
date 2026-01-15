@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
-from mellea_api.core.deps import CurrentUser
+from mellea_api.core.deps import CurrentUser, CurrentUserSSE
 from mellea_api.models.common import ImageBuildStatus, RunExecutionStatus
 from mellea_api.models.run import Run
 from mellea_api.services.assets import AssetService, get_asset_service
@@ -363,7 +363,7 @@ async def stream_run_logs(
 @router.get("/{run_id}/logs/stream")
 async def stream_run_logs_sse(
     run_id: str,
-    current_user: CurrentUser,
+    current_user: CurrentUserSSE,
     run_service: RunServiceDep,
     log_service: LogServiceDep,
 ) -> EventSourceResponse:

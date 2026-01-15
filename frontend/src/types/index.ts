@@ -199,6 +199,18 @@ export interface UpdateCredentialRequest {
   expiresAt?: string;
 }
 
+// Log streaming types
+export interface LogEntry {
+  runId: string;
+  content: string;
+  timestamp: string | null;
+  isComplete: boolean;
+}
+
+export interface LogStreamCompleteEvent {
+  status: string;
+}
+
 // API response types
 export interface ApiError {
   detail: string;

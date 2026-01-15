@@ -35,7 +35,7 @@ import {
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiPlay, FiClock, FiTrash2 } from 'react-icons/fi';
 import { CodeViewer } from '@/components/Programs';
-import { RunPanel, RunStatusBadge } from '@/components/Runs';
+import { RunPanel, RunStatusBadge, LogViewer } from '@/components/Runs';
 import { programsApi, runsApi } from '@/api';
 import type { ProgramAsset, Run } from '@/types';
 
@@ -377,12 +377,23 @@ export function ProgramDetailPage() {
                 maxHeight="400px"
               />
 
-              {/* Run Panel */}
-              <RunPanel
-                run={currentRun}
-                onCancel={handleCancelRun}
-                onClose={() => setCurrentRun(null)}
-              />
+              {/* Live Log Viewer for active runs, RunPanel for completed */}
+              {currentRun && (currentRun.status === 'queued' || currentRun.status === 'starting' || currentRun.status === 'running') ? (
+                <LogViewer
+                  runId={currentRun.id}
+                  onComplete={() => {
+                    // Refresh run data when stream completes
+                    runsApi.get(currentRun.id).then(setCurrentRun);
+                    loadRuns();
+                  }}
+                />
+              ) : (
+                <RunPanel
+                  run={currentRun}
+                  onCancel={handleCancelRun}
+                  onClose={() => setCurrentRun(null)}
+                />
+              )}
             </VStack>
           </TabPanel>
 
