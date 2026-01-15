@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useToast } from '@chakra-ui/react';
-import { programsApi, githubImportApi } from '@/api';
+import { programsApi, githubImportApi, archiveUploadApi } from '@/api';
 import type { ProgramAsset, CreateProgramRequest } from '@/types';
 import type { WizardStep, WizardFormData, StepErrors, UseWizardReturn } from './types';
 
@@ -90,6 +90,12 @@ export function useProgramWizard(options: UseProgramWizardOptions = {}): UseWiza
       case 'upload':
         if (!data.upload.file) {
           newErrors.uploadFile = 'Please select a file to upload';
+        } else if (data.upload.isUploading) {
+          newErrors.uploadFile = 'Please wait for upload to complete';
+        } else if (data.upload.uploadError) {
+          newErrors.uploadFile = data.upload.uploadError;
+        } else if (!data.upload.sessionId || !data.upload.analysis) {
+          newErrors.uploadFile = 'Please wait for analysis to complete';
         }
         break;
     }
@@ -197,8 +203,20 @@ export function useProgramWizard(options: UseProgramWizardOptions = {}): UseWiza
           entrypoint: data.entrypoint,
         });
         program = response.asset;
+      } else if (data.importSource === 'upload' && data.upload.sessionId) {
+        // Use archive upload confirm API
+        const response = await archiveUploadApi.confirm({
+          sessionId: data.upload.sessionId,
+          metadata: {
+            name: data.name.trim(),
+            description: data.description.trim() || undefined,
+            tags: data.tags.length > 0 ? data.tags : undefined,
+          },
+          entrypoint: data.entrypoint,
+        });
+        program = response.asset;
       } else {
-        // Use standard program creation
+        // Use standard program creation (manual code entry)
         const sourceCode = await getFinalSourceCode();
 
         const request: CreateProgramRequest = {

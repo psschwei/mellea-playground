@@ -35,12 +35,41 @@ export interface GitHubAnalysisResult {
 export interface UploadImportData {
   file: File | null;
   extractedFiles?: ExtractedFile[];
+  // Analysis state
+  sessionId?: string;
+  isUploading?: boolean;
+  uploadError?: string;
+  analysis?: UploadAnalysisResult;
 }
 
 export interface ExtractedFile {
   path: string;
   content: string;
   size: number;
+}
+
+// Upload analysis result (from backend)
+export interface UploadAnalysisResult {
+  rootFiles: string[];
+  allFiles: {
+    path: string;
+    size: number;
+    isPython: boolean;
+  }[];
+  detectedEntrypoint: string | null;
+  detectedDependencies: {
+    source: string;
+    packages: { name: string; version?: string }[];
+    pythonVersion?: string;
+  } | null;
+  detectedSlots: {
+    name: string;
+    qualifiedName: string;
+    sourceFile: string;
+    lineNumber: number;
+  }[];
+  totalSize: number;
+  fileCount: number;
 }
 
 // Wizard form data (accumulated across steps)
