@@ -17,6 +17,7 @@ from mellea_api.services.credentials import CredentialService, get_credential_se
 from mellea_api.services.environment import EnvironmentService, get_environment_service
 from mellea_api.services.k8s_jobs import K8sJobService, get_k8s_job_service
 from mellea_api.services.kaniko_builder import KanikoBuildService, get_kaniko_build_service
+from mellea_api.services.log import LogService, get_log_service
 from mellea_api.services.run import RunNotFoundError, RunService, get_run_service
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,7 @@ class RunExecutor:
         k8s_service: K8sJobService | None = None,
         environment_service: EnvironmentService | None = None,
         credential_service: CredentialService | None = None,
+        log_service: LogService | None = None,
     ) -> None:
         """Initialize the RunExecutor.
 
@@ -98,11 +100,13 @@ class RunExecutor:
             k8s_service: K8sJobService instance (uses global if not provided)
             environment_service: EnvironmentService instance (uses global if not provided)
             credential_service: CredentialService instance (uses global if not provided)
+            log_service: LogService instance (uses global if not provided)
         """
         self._run_service = run_service
         self._k8s_service = k8s_service
         self._environment_service = environment_service
         self._credential_service = credential_service
+        self._log_service = log_service
 
     @property
     def run_service(self) -> RunService:
@@ -131,6 +135,13 @@ class RunExecutor:
         if self._credential_service is None:
             self._credential_service = get_credential_service()
         return self._credential_service
+
+    @property
+    def log_service(self) -> LogService:
+        """Get the LogService, using global instance if not set."""
+        if self._log_service is None:
+            self._log_service = get_log_service()
+        return self._log_service
 
     def submit_run(
         self,
@@ -284,11 +295,15 @@ class RunExecutor:
         if current_status == target_status:
             if output and output != run.output:
                 # Update output without changing status
-                return self.run_service.update_output(run.id, output)
+                updated_run = self.run_service.update_output(run.id, output)
+                # Publish logs to Redis for real-time streaming
+                self.log_service.publish_logs_sync(run.id, output)
+                return updated_run
             return run
 
         # Update based on target status
         updated_run = run
+        is_terminal = False
         if target_status == RunExecutionStatus.RUNNING:
             updated_run = self.run_service.mark_running(run.id, output=output)
         elif target_status == RunExecutionStatus.SUCCEEDED:
@@ -297,6 +312,7 @@ class RunExecutor:
                 exit_code=job_info.exit_code or 0,
                 output=output,
             )
+            is_terminal = True
         elif target_status == RunExecutionStatus.FAILED:
             updated_run = self.run_service.mark_failed(
                 run.id,
@@ -304,6 +320,11 @@ class RunExecutor:
                 error=job_info.error_message,
                 output=output,
             )
+            is_terminal = True
+
+        # Publish logs to Redis for real-time streaming
+        if output:
+            self.log_service.publish_logs_sync(run.id, output, is_complete=is_terminal)
 
         # Clean up K8s job after run completes (terminal state)
         if updated_run.is_terminal() and run.job_name:

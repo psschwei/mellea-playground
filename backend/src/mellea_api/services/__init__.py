@@ -35,6 +35,12 @@ from mellea_api.services.kaniko_builder import (
     get_kaniko_build_service,
     reset_kaniko_build_service,
 )
+from mellea_api.services.log import (
+    LogEntry,
+    LogService,
+    get_log_service,
+    reset_log_service,
+)
 from mellea_api.services.warmup import (
     WarmupController,
     WarmupService,
@@ -77,4 +83,9 @@ __all__ = [
     "get_warmup_service",
     "WarmupController",
     "get_warmup_controller",
+    # Log service
+    "LogService",
+    "get_log_service",
+    "LogEntry",
+    "reset_log_service",
 ]

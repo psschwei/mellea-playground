@@ -1,8 +1,9 @@
 """Run routes for managing program execution."""
 
+import contextlib
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
 
 from mellea_api.core.deps import CurrentUser
@@ -18,6 +19,7 @@ from mellea_api.services.environment_builder import (
     EnvironmentBuilderService,
     get_environment_builder_service,
 )
+from mellea_api.services.log import LogService, get_log_service
 from mellea_api.services.run import (
     InvalidRunStateTransitionError,
     RunNotFoundError,
@@ -34,6 +36,7 @@ CredentialServiceDep = Annotated[CredentialService, Depends(get_credential_servi
 EnvironmentBuilderServiceDep = Annotated[
     EnvironmentBuilderService, Depends(get_environment_builder_service)
 ]
+LogServiceDep = Annotated[LogService, Depends(get_log_service)]
 
 router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
 
@@ -272,3 +275,79 @@ async def cancel_run(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
+
+
+@router.websocket("/{run_id}/logs")
+async def stream_run_logs(
+    websocket: WebSocket,
+    run_id: str,
+    run_service: RunServiceDep,
+    log_service: LogServiceDep,
+) -> None:
+    """Stream run logs in real-time via WebSocket.
+
+    Connects to the Redis pub/sub channel for the specified run and streams
+    log updates to the WebSocket client as they arrive.
+
+    The WebSocket connection will:
+    - First send any existing output from the run
+    - Then stream new log entries as they are published
+    - Close when the run completes (receives is_complete=True)
+
+    Message format (JSON):
+    ```json
+    {
+        "type": "log",
+        "run_id": "run-123",
+        "content": "Hello, World!",
+        "timestamp": "2024-01-01T12:00:00Z",
+        "is_complete": false
+    }
+    ```
+    """
+    # Verify the run exists before accepting connection
+    run = run_service.get_run(run_id)
+    if run is None:
+        await websocket.close(code=4004, reason=f"Run not found: {run_id}")
+        return
+
+    await websocket.accept()
+
+    try:
+        # Send existing output first if available
+        if run.output:
+            # Use the most recent timestamp available
+            timestamp = run.completed_at or run.started_at or run.created_at
+            await websocket.send_json({
+                "type": "log",
+                "run_id": run_id,
+                "content": run.output,
+                "timestamp": timestamp.isoformat() if timestamp else None,
+                "is_complete": run.is_terminal(),
+            })
+
+        # If run is already terminal, close the connection
+        if run.is_terminal():
+            await websocket.close(code=1000, reason="Run already completed")
+            return
+
+        # Stream new log entries from Redis pub/sub
+        async for entry in log_service.subscribe(run_id):
+            await websocket.send_json({
+                "type": "log",
+                "run_id": entry.run_id,
+                "content": entry.content,
+                "timestamp": entry.timestamp.isoformat(),
+                "is_complete": entry.is_complete,
+            })
+
+            if entry.is_complete:
+                break
+
+    except WebSocketDisconnect:
+        # Client disconnected, clean up gracefully
+        pass
+    finally:
+        # Ensure websocket is closed
+        with contextlib.suppress(Exception):
+            await websocket.close()
