@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   VStack,
@@ -11,6 +11,12 @@ import {
   Spinner,
   Center,
   Icon,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
 } from '@chakra-ui/react';
 import { FiPlus, FiFile } from 'react-icons/fi';
 import { ProgramCard, CreateProgramModal } from '@/components/Programs';
@@ -22,7 +28,16 @@ export function ProgramsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [buildingProgramId, setBuildingProgramId] = useState<string | null>(null);
   const [runningProgramId, setRunningProgramId] = useState<string | null>(null);
+  const [deletingProgram, setDeletingProgram] = useState<ProgramAsset | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteProgramRunCount, setDeleteProgramRunCount] = useState(0);
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const {
+    isOpen: isDeleteOpen,
+    onOpen: onDeleteOpen,
+    onClose: onDeleteClose,
+  } = useDisclosure();
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const toast = useToast();
 
   const loadPrograms = useCallback(async () => {
@@ -42,6 +57,47 @@ export function ProgramsPage() {
 
   const handleProgramCreated = (program: ProgramAsset) => {
     setPrograms((prev) => [program, ...prev]);
+  };
+
+  const handleDeleteClick = async (program: ProgramAsset) => {
+    setDeletingProgram(program);
+    // Check for existing runs to warn the user
+    try {
+      const runs = await runsApi.listByProgram(program.id);
+      setDeleteProgramRunCount(runs.length);
+    } catch {
+      setDeleteProgramRunCount(0);
+    }
+    onDeleteOpen();
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingProgram) return;
+
+    setIsDeleting(true);
+    try {
+      await programsApi.delete(deletingProgram.id);
+      setPrograms((prev) => prev.filter((p) => p.id !== deletingProgram.id));
+      toast({
+        title: 'Program deleted',
+        description: `"${deletingProgram.name}" has been deleted.`,
+        status: 'success',
+        duration: 3000,
+      });
+      onDeleteClose();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to delete program';
+      toast({
+        title: 'Error',
+        description: message,
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsDeleting(false);
+      setDeletingProgram(null);
+      setDeleteProgramRunCount(0);
+    }
   };
 
   const handleRunProgram = async (program: ProgramAsset) => {
@@ -189,6 +245,7 @@ export function ProgramsPage() {
               key={program.id}
               program={program}
               onRun={handleRunProgram}
+              onDelete={handleDeleteClick}
               isBuilding={buildingProgramId === program.id}
               isRunning={runningProgramId === program.id}
             />
@@ -197,6 +254,46 @@ export function ProgramsPage() {
       )}
 
       <CreateProgramModal isOpen={isOpen} onClose={onClose} onCreated={handleProgramCreated} />
+
+      <AlertDialog
+        isOpen={isDeleteOpen}
+        leastDestructiveRef={cancelRef}
+        onClose={onDeleteClose}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Delete Program
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              Are you sure you want to delete "{deletingProgram?.name}"?
+              {deleteProgramRunCount > 0 && (
+                <Text mt={2} color="orange.500">
+                  This program has {deleteProgramRunCount} run{deleteProgramRunCount !== 1 ? 's' : ''} that will no longer be accessible.
+                </Text>
+              )}
+              <Text mt={2} color="gray.500">
+                This action cannot be undone.
+              </Text>
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={onDeleteClose}>
+                Cancel
+              </Button>
+              <Button
+                colorScheme="red"
+                onClick={handleDeleteConfirm}
+                ml={3}
+                isLoading={isDeleting}
+              >
+                Delete
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Box>
   );
 }

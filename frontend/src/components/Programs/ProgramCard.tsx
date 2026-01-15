@@ -10,13 +10,14 @@ import {
   Badge,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { FiFile, FiPlay, FiChevronRight } from 'react-icons/fi';
+import { FiFile, FiPlay, FiChevronRight, FiTrash2 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import type { ProgramAsset } from '@/types';
 
 interface ProgramCardProps {
   program: ProgramAsset;
   onRun?: (program: ProgramAsset) => void;
+  onDelete?: (program: ProgramAsset) => void;
   isBuilding?: boolean;
   isRunning?: boolean;
 }
@@ -36,7 +37,7 @@ function formatRelativeTime(dateString?: string): string {
   return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 }
 
-export function ProgramCard({ program, onRun, isBuilding = false, isRunning = false }: ProgramCardProps) {
+export function ProgramCard({ program, onRun, onDelete, isBuilding = false, isRunning = false }: ProgramCardProps) {
   const navigate = useNavigate();
   const bgHover = useColorModeValue('gray.50', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -108,6 +109,17 @@ export function ProgramCard({ program, onRun, isBuilding = false, isRunning = fa
             >
               View
             </Button>
+            {onDelete && (
+              <Button
+                size="sm"
+                variant="ghost"
+                colorScheme="red"
+                onClick={() => onDelete(program)}
+                aria-label="Delete program"
+              >
+                <Icon as={FiTrash2} />
+              </Button>
+            )}
           </HStack>
         </HStack>
       </CardBody>
