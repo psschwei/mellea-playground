@@ -175,19 +175,14 @@ class KanikoBuildService:
             "--dockerfile=/workspace/Dockerfile",
             "--context=dir:///workspace",
             f"--destination={image_tag}",
-            "--cache=true",
+            "--cache=false",  # Disabled due to registry connectivity issues
             "--snapshot-mode=redo",
-            "--use-new-run",  # Better layer caching
+            "--use-new-run",
         ]
 
         # Add insecure flag for HTTP registries (e.g., local Kind registry)
         if self.settings.registry_insecure:
             kaniko_args.append("--insecure")
-
-        # Add cache repo if registry is configured
-        if self.settings.registry_url:
-            cache_repo = f"{self.settings.registry_url}/mellea-cache"
-            kaniko_args.append(f"--cache-repo={cache_repo}")
 
         # Volume mounts for Kaniko container
         volume_mounts = [
