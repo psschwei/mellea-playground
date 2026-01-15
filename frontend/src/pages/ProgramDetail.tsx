@@ -551,6 +551,23 @@ export function ProgramDetailPage() {
               </Center>
             ) : (
               <VStack align="stretch" spacing={4}>
+                {/* Selected run output panel */}
+                {currentRun && (currentRun.status === 'queued' || currentRun.status === 'starting' || currentRun.status === 'running') ? (
+                  <LogViewer
+                    runId={currentRun.id}
+                    onComplete={() => {
+                      runsApi.get(currentRun.id).then(setCurrentRun);
+                      loadRuns();
+                    }}
+                  />
+                ) : currentRun ? (
+                  <RunPanel
+                    run={currentRun}
+                    onCancel={handleCancelRun}
+                    onClose={() => setCurrentRun(null)}
+                  />
+                ) : null}
+
                 {/* Bulk actions bar */}
                 {selectedRunIds.size > 0 && (
                   <HStack bg="gray.50" p={2} borderRadius="md" justify="space-between">
