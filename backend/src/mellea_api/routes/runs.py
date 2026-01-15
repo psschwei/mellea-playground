@@ -1,10 +1,13 @@
 """Run routes for managing program execution."""
 
 import contextlib
+import json
+from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
+from sse_starlette.sse import EventSourceResponse
 
 from mellea_api.core.deps import CurrentUser
 from mellea_api.models.common import ImageBuildStatus, RunExecutionStatus
@@ -318,13 +321,15 @@ async def stream_run_logs(
         if run.output:
             # Use the most recent timestamp available
             timestamp = run.completed_at or run.started_at or run.created_at
-            await websocket.send_json({
-                "type": "log",
-                "run_id": run_id,
-                "content": run.output,
-                "timestamp": timestamp.isoformat() if timestamp else None,
-                "is_complete": run.is_terminal(),
-            })
+            await websocket.send_json(
+                {
+                    "type": "log",
+                    "run_id": run_id,
+                    "content": run.output,
+                    "timestamp": timestamp.isoformat() if timestamp else None,
+                    "is_complete": run.is_terminal(),
+                }
+            )
 
         # If run is already terminal, close the connection
         if run.is_terminal():
@@ -333,13 +338,15 @@ async def stream_run_logs(
 
         # Stream new log entries from Redis pub/sub
         async for entry in log_service.subscribe(run_id):
-            await websocket.send_json({
-                "type": "log",
-                "run_id": entry.run_id,
-                "content": entry.content,
-                "timestamp": entry.timestamp.isoformat(),
-                "is_complete": entry.is_complete,
-            })
+            await websocket.send_json(
+                {
+                    "type": "log",
+                    "run_id": entry.run_id,
+                    "content": entry.content,
+                    "timestamp": entry.timestamp.isoformat(),
+                    "is_complete": entry.is_complete,
+                }
+            )
 
             if entry.is_complete:
                 break
@@ -351,3 +358,88 @@ async def stream_run_logs(
         # Ensure websocket is closed
         with contextlib.suppress(Exception):
             await websocket.close()
+
+
+@router.get("/{run_id}/logs/stream")
+async def stream_run_logs_sse(
+    run_id: str,
+    current_user: CurrentUser,
+    run_service: RunServiceDep,
+    log_service: LogServiceDep,
+) -> EventSourceResponse:
+    """Stream run logs in real-time via Server-Sent Events.
+
+    Connects to the Redis pub/sub channel for the specified run and streams
+    log updates to the client as SSE events.
+
+    The stream will:
+    - First send any existing output from the run as a "log" event
+    - Then stream new log entries as "log" events as they are published
+    - Send a "complete" event when the run finishes
+
+    Event format:
+    ```
+    event: log
+    data: {"run_id": "run-123", "content": "Hello", "timestamp": "...", "is_complete": false}
+
+    event: complete
+    data: {"status": "succeeded"}
+    ```
+    """
+    # Verify the run exists
+    run = run_service.get_run(run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run not found: {run_id}",
+        )
+
+    async def event_generator() -> AsyncGenerator[dict[str, str], None]:
+        # Send existing output first if available
+        if run.output:
+            timestamp = run.completed_at or run.started_at or run.created_at
+            yield {
+                "event": "log",
+                "data": json.dumps(
+                    {
+                        "run_id": run_id,
+                        "content": run.output,
+                        "timestamp": timestamp.isoformat() if timestamp else None,
+                        "is_complete": run.is_terminal(),
+                    }
+                ),
+            }
+
+        # If run is already terminal, send complete event and stop
+        if run.is_terminal():
+            yield {
+                "event": "complete",
+                "data": json.dumps({"status": run.status.value}),
+            }
+            return
+
+        # Stream new log entries from Redis pub/sub
+        async for entry in log_service.subscribe(run_id):
+            yield {
+                "event": "log",
+                "data": json.dumps(
+                    {
+                        "run_id": entry.run_id,
+                        "content": entry.content,
+                        "timestamp": entry.timestamp.isoformat(),
+                        "is_complete": entry.is_complete,
+                    }
+                ),
+            }
+
+            if entry.is_complete:
+                # Fetch fresh run status for completion event
+                final_run = run_service.get_run(run_id)
+                final_status = final_run.status.value if final_run else "unknown"
+                yield {
+                    "event": "complete",
+                    "data": json.dumps({"status": final_status}),
+                }
+                break
+
+    return EventSourceResponse(event_generator())

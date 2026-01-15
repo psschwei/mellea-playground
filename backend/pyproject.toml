@@ -24,6 +24,7 @@ dependencies = [
     "python-multipart>=0.0.6",
     "kubernetes>=28.0.0",
     "cryptography>=42.0.0",
+    "sse-starlette>=2.0.0",
 ]
 
 [project.optional-dependencies]

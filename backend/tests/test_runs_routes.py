@@ -1,5 +1,6 @@
 """Tests for run API routes."""
 
+import json
 import os
 import tempfile
 from collections.abc import Iterator
@@ -176,9 +177,7 @@ class TestListRuns:
         response = client.get("/api/v1/runs")
         assert response.status_code == 401
 
-    def test_list_runs_empty(
-        self, client: TestClient, auth_headers: dict[str, str]
-    ) -> None:
+    def test_list_runs_empty(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Test listing runs when none exist."""
         response = client.get("/api/v1/runs", headers=auth_headers)
         assert response.status_code == 200
@@ -264,9 +263,7 @@ class TestGetRun:
         response = client.get("/api/v1/runs/some-id")
         assert response.status_code == 401
 
-    def test_get_run_nonexistent(
-        self, client: TestClient, auth_headers: dict[str, str]
-    ) -> None:
+    def test_get_run_nonexistent(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Test getting a non-existent run returns 404."""
         response = client.get("/api/v1/runs/nonexistent", headers=auth_headers)
         assert response.status_code == 404
@@ -302,9 +299,7 @@ class TestCancelRun:
         response = client.post("/api/v1/runs/some-id/cancel")
         assert response.status_code == 401
 
-    def test_cancel_run_nonexistent(
-        self, client: TestClient, auth_headers: dict[str, str]
-    ) -> None:
+    def test_cancel_run_nonexistent(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Test cancelling a non-existent run returns 404."""
         response = client.post("/api/v1/runs/nonexistent/cancel", headers=auth_headers)
         assert response.status_code == 404
@@ -537,3 +532,93 @@ class TestCreateRunWithCredentials:
             },
         )
         assert response.status_code == 201
+
+
+class TestStreamRunLogsSSE:
+    """Tests for GET /api/v1/runs/{id}/logs/stream SSE endpoint."""
+
+    def test_stream_logs_sse_requires_auth(self, client: TestClient) -> None:
+        """Test that streaming logs via SSE requires authentication."""
+        response = client.get("/api/v1/runs/some-id/logs/stream")
+        assert response.status_code == 401
+
+    def test_stream_logs_sse_nonexistent_run(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        """Test streaming logs for a non-existent run returns 404."""
+        response = client.get(
+            "/api/v1/runs/nonexistent/logs/stream",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_stream_logs_sse_returns_event_stream(
+        self, client: TestClient, auth_headers: dict[str, str], program_with_image: dict
+    ) -> None:
+        """Test that SSE endpoint returns correct content type."""
+        # Create a run and cancel it so the stream terminates
+        create_response = client.post(
+            "/api/v1/runs",
+            headers=auth_headers,
+            json={"programId": program_with_image["id"]},
+        )
+        assert create_response.status_code == 201
+        run_id = create_response.json()["run"]["id"]
+
+        # Cancel the run to make it terminal
+        cancel_response = client.post(
+            f"/api/v1/runs/{run_id}/cancel",
+            headers=auth_headers,
+        )
+        assert cancel_response.status_code == 200
+
+        # Stream logs - use stream=True to get SSE response
+        with client.stream(
+            "GET",
+            f"/api/v1/runs/{run_id}/logs/stream",
+            headers=auth_headers,
+        ) as response:
+            assert response.status_code == 200
+            assert "text/event-stream" in response.headers.get("content-type", "")
+
+    def test_stream_logs_sse_completed_run_sends_events(
+        self, client: TestClient, auth_headers: dict[str, str], program_with_image: dict
+    ) -> None:
+        """Test streaming logs for a completed run sends log and complete events."""
+        # Create and cancel a run (to make it terminal)
+        create_response = client.post(
+            "/api/v1/runs",
+            headers=auth_headers,
+            json={"programId": program_with_image["id"]},
+        )
+        assert create_response.status_code == 201
+        run_id = create_response.json()["run"]["id"]
+
+        # Cancel the run to make it terminal
+        cancel_response = client.post(
+            f"/api/v1/runs/{run_id}/cancel",
+            headers=auth_headers,
+        )
+        assert cancel_response.status_code == 200
+
+        # Stream logs and collect events
+        events = []
+        with client.stream(
+            "GET",
+            f"/api/v1/runs/{run_id}/logs/stream",
+            headers=auth_headers,
+        ) as response:
+            assert response.status_code == 200
+            for line in response.iter_lines():
+                if line.startswith("event:"):
+                    event_type = line.replace("event:", "").strip()
+                elif line.startswith("data:"):
+                    data = line.replace("data:", "").strip()
+                    events.append({"event": event_type, "data": json.loads(data)})
+
+        # Should have at least a complete event
+        assert len(events) >= 1
+        complete_events = [e for e in events if e["event"] == "complete"]
+        assert len(complete_events) == 1
+        assert complete_events[0]["data"]["status"] == "cancelled"
