@@ -56,7 +56,9 @@ spec:
             - name: MELLEA_BUILD_BACKEND
               value: "kaniko"
             - name: MELLEA_REGISTRY_URL
-              value: "localhost:5001"  # Kind's local registry
+              value: "kind-registry:5000"  # Kind's local registry (in-cluster address)
+            - name: MELLEA_REGISTRY_INSECURE
+              value: "true"  # Use HTTP for local Kind registry
           volumeMounts:
             - name: assets
               mountPath: /app/data/metadata

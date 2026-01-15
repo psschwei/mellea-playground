@@ -1,0 +1,38 @@
+# RBAC resources for run jobs
+# Allows the backend to create and manage run jobs in mellea-runs namespace
+---
+# Role for managing run jobs and resources in mellea-runs namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: run-manager
+  namespace: mellea-runs
+  labels:
+    app.kubernetes.io/part-of: mellea
+rules:
+  # Manage run jobs
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  # Read pods and logs for run status
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+# Allow backend service account to manage runs
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: run-manager-binding
+  namespace: mellea-runs
+  labels:
+    app.kubernetes.io/part-of: mellea
+subjects:
+  # Backend runs as default service account in mellea-system
+  - kind: ServiceAccount
+    name: default
+    namespace: mellea-system
+roleRef:
+  kind: Role
+  name: run-manager
+  apiGroup: rbac.authorization.k8s.io

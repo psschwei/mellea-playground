@@ -596,7 +596,7 @@ FROM {base_image}
 WORKDIR /app
 
 # Install dependencies
-RUN echo -e "{requirements_content}" > /tmp/requirements.txt && \\
+RUN printf '%b' "{requirements_content}" > /tmp/requirements.txt && \\
     pip install --no-cache-dir -r /tmp/requirements.txt && \\
     rm /tmp/requirements.txt
 

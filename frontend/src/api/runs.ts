@@ -1,22 +1,30 @@
 import apiClient from './client';
 import type { Run, CreateRunRequest } from '@/types';
 
+interface RunResponse {
+  run: Run;
+}
+
+interface RunsListResponse {
+  runs: Run[];
+  total: number;
+}
+
 export const runsApi = {
   /**
    * Create and start a new run
-   * Note: This endpoint needs to be wired up in backend
    */
   create: async (data: CreateRunRequest): Promise<Run> => {
-    const response = await apiClient.post<Run>('/runs', data);
-    return response.data;
+    const response = await apiClient.post<RunResponse>('/runs', data);
+    return response.data.run;
   },
 
   /**
    * Get a run by ID
    */
   get: async (id: string): Promise<Run> => {
-    const response = await apiClient.get<Run>(`/runs/${id}`);
-    return response.data;
+    const response = await apiClient.get<RunResponse>(`/runs/${id}`);
+    return response.data.run;
   },
 
   /**
@@ -24,10 +32,10 @@ export const runsApi = {
    */
   listByProgram: async (programId: string): Promise<Run[]> => {
     try {
-      const response = await apiClient.get<Run[]>('/runs', {
+      const response = await apiClient.get<RunsListResponse>('/runs', {
         params: { programId },
       });
-      return response.data;
+      return response.data.runs;
     } catch {
       console.warn('List runs endpoint not available, returning empty array');
       return [];
@@ -38,8 +46,8 @@ export const runsApi = {
    * Cancel a running execution
    */
   cancel: async (id: string): Promise<Run> => {
-    const response = await apiClient.post<Run>(`/runs/${id}/cancel`);
-    return response.data;
+    const response = await apiClient.post<RunResponse>(`/runs/${id}/cancel`);
+    return response.data.run;
   },
 
   /**
