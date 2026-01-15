@@ -1,7 +1,12 @@
 """RunExecutor for submitting and managing program runs on Kubernetes."""
 
+import asyncio
+import contextlib
 import logging
+from dataclasses import dataclass, field
+from datetime import datetime
 
+from mellea_api.core.config import Settings, get_settings
 from mellea_api.models.common import RunExecutionStatus
 from mellea_api.models.k8s import JobInfo, JobStatus
 from mellea_api.models.run import Run
@@ -358,8 +363,199 @@ class RunExecutor:
             return False
 
 
+@dataclass
+class ExecutorMetrics:
+    """Metrics from a run executor cycle."""
+
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+    queued_runs_found: int = 0
+    runs_submitted: int = 0
+    active_runs_synced: int = 0
+    errors: list[str] = field(default_factory=list)
+    duration_seconds: float = 0.0
+
+
+class RunExecutorController:
+    """Background controller that processes queued runs and syncs active runs.
+
+    This controller manages the background task that:
+    - Polls for QUEUED runs and submits them to Kubernetes
+    - Syncs status of STARTING/RUNNING runs with their K8s jobs
+
+    Example:
+        ```python
+        controller = RunExecutorController()
+        await controller.start()  # Start background processing
+        # ... application runs ...
+        await controller.stop()   # Stop on shutdown
+        ```
+    """
+
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        run_executor: "RunExecutor | None" = None,
+        run_service: RunService | None = None,
+    ) -> None:
+        """Initialize the controller.
+
+        Args:
+            settings: Application settings (uses default if not provided)
+            run_executor: Optional RunExecutor instance
+            run_service: Optional RunService instance
+        """
+        self.settings = settings or get_settings()
+        self._run_executor = run_executor
+        self._run_service = run_service
+        self._task: asyncio.Task | None = None
+        self._running = False
+        self._last_metrics: ExecutorMetrics | None = None
+
+    @property
+    def run_executor(self) -> "RunExecutor":
+        """Get the run executor instance."""
+        if self._run_executor is None:
+            self._run_executor = get_run_executor()
+        return self._run_executor
+
+    @property
+    def run_service(self) -> RunService:
+        """Get the run service instance."""
+        if self._run_service is None:
+            self._run_service = get_run_service()
+        return self._run_service
+
+    @property
+    def is_running(self) -> bool:
+        """Check if the controller is running."""
+        return self._running and self._task is not None
+
+    async def run_cycle(self) -> ExecutorMetrics:
+        """Run a single processing cycle.
+
+        This method:
+        1. Finds queued runs and submits them to K8s
+        2. Syncs status of active (STARTING/RUNNING) runs
+
+        Returns:
+            ExecutorMetrics with statistics about the cycle
+        """
+        start_time = datetime.utcnow()
+        metrics = ExecutorMetrics(timestamp=start_time)
+
+        # 1. Submit queued runs
+        queued_runs = self.run_service.list_runs(status=RunExecutionStatus.QUEUED)
+        metrics.queued_runs_found = len(queued_runs)
+
+        for run in queued_runs:
+            try:
+                self.run_executor.submit_run(run.id)
+                metrics.runs_submitted += 1
+                logger.info("Submitted queued run %s", run.id)
+            except Exception as e:
+                error_msg = f"Failed to submit run {run.id}: {e}"
+                logger.error(error_msg)
+                metrics.errors.append(error_msg)
+
+        # 2. Sync active runs (STARTING and RUNNING)
+        for status in [RunExecutionStatus.STARTING, RunExecutionStatus.RUNNING]:
+            active_runs = self.run_service.list_runs(status=status)
+
+            for run in active_runs:
+                try:
+                    self.run_executor.sync_run_status(run.id)
+                    metrics.active_runs_synced += 1
+                except Exception as e:
+                    error_msg = f"Failed to sync run {run.id}: {e}"
+                    logger.error(error_msg)
+                    metrics.errors.append(error_msg)
+
+        # Calculate duration
+        end_time = datetime.utcnow()
+        metrics.duration_seconds = (end_time - start_time).total_seconds()
+
+        self._last_metrics = metrics
+
+        if metrics.runs_submitted > 0 or metrics.errors:
+            logger.info(
+                "Run executor cycle: submitted %d runs, synced %d active runs, "
+                "%d errors, duration %.2fs",
+                metrics.runs_submitted,
+                metrics.active_runs_synced,
+                len(metrics.errors),
+                metrics.duration_seconds,
+            )
+
+        return metrics
+
+    async def _run_loop(self) -> None:
+        """Background loop that processes runs at configured intervals."""
+        interval = self.settings.run_executor_interval_seconds
+        logger.info(
+            "Run executor controller started, running every %d seconds", interval
+        )
+
+        while self._running:
+            try:
+                await self.run_cycle()
+            except Exception as e:
+                logger.error("Error in run executor cycle: %s", e)
+
+            # Sleep for the configured interval
+            try:
+                await asyncio.sleep(interval)
+            except asyncio.CancelledError:
+                break
+
+        logger.info("Run executor controller stopped")
+
+    async def start(self) -> None:
+        """Start the background run executor controller.
+
+        Does nothing if controller is disabled in settings or already running.
+        """
+        if not self.settings.run_executor_enabled:
+            logger.info("Run executor controller is disabled in settings")
+            return
+
+        if self._running:
+            logger.warning("Run executor controller is already running")
+            return
+
+        self._running = True
+        self._task = asyncio.create_task(self._run_loop())
+        logger.info("Run executor controller background task created")
+
+    async def stop(self) -> None:
+        """Stop the background run executor controller.
+
+        Waits for the current cycle to complete before stopping.
+        """
+        if not self._running:
+            return
+
+        self._running = False
+
+        if self._task is not None:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
+            self._task = None
+
+        logger.info("Run executor controller stopped")
+
+    def get_last_metrics(self) -> ExecutorMetrics | None:
+        """Get metrics from the last cycle.
+
+        Returns:
+            Last ExecutorMetrics or None if no cycle has run
+        """
+        return self._last_metrics
+
+
 # Global executor instance
 _run_executor: RunExecutor | None = None
+_run_executor_controller: RunExecutorController | None = None
 
 
 def get_run_executor() -> RunExecutor:
@@ -368,3 +564,11 @@ def get_run_executor() -> RunExecutor:
     if _run_executor is None:
         _run_executor = RunExecutor()
     return _run_executor
+
+
+def get_run_executor_controller() -> RunExecutorController:
+    """Get the global RunExecutorController instance."""
+    global _run_executor_controller
+    if _run_executor_controller is None:
+        _run_executor_controller = RunExecutorController()
+    return _run_executor_controller

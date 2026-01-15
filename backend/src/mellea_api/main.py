@@ -19,6 +19,7 @@ from mellea_api.routes import (
 )
 from mellea_api.services.auth import get_auth_service
 from mellea_api.services.idle_timeout import get_idle_timeout_controller
+from mellea_api.services.run_executor import get_run_executor_controller
 from mellea_api.services.warmup import get_warmup_controller
 
 # Configure logging
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     idle_controller = get_idle_timeout_controller()
     warmup_controller = get_warmup_controller()
+    run_executor_controller = get_run_executor_controller()
 
     # Startup
     logger.info(f"Starting {settings.app_name} in {settings.environment} mode")
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Start background controllers
     await idle_controller.start()
     await warmup_controller.start()
+    await run_executor_controller.start()
 
     yield
 
@@ -59,6 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Shutting down...")
 
     # Stop background controllers
+    await run_executor_controller.stop()
     await warmup_controller.stop()
     await idle_controller.stop()
 

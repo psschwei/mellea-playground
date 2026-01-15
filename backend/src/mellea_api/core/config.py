@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     registry_url: str | None = None  # e.g., "registry.example.com", "ghcr.io/user", "quay.io/org"
     registry_username: str | None = None
     registry_password: str | None = None
+    registry_insecure: bool = False  # Use HTTP instead of HTTPS (for local registries)
 
     # Build Backend
     build_backend: Literal["docker", "kaniko"] = "docker"
@@ -67,6 +68,10 @@ class Settings(BaseSettings):
     warmup_pool_size: int = 3  # Number of warm environments to maintain
     warmup_max_age_minutes: int = 30  # Recycle warm envs older than this
     warmup_popular_deps_count: int = 5  # Pre-build top N popular dependency sets
+
+    # Run Executor Controller
+    run_executor_enabled: bool = True
+    run_executor_interval_seconds: int = 5  # Poll for queued runs every 5 seconds
 
     def ensure_data_dirs(self) -> None:
         """Create data directory structure if it doesn't exist."""
