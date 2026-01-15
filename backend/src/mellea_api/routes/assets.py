@@ -220,11 +220,18 @@ async def get_asset(
     """Get an asset by ID.
 
     Searches across all asset types (programs, models, compositions) and
-    returns the matching asset.
+    returns the matching asset. For programs, includes the source code.
     """
     # Try each store in order
     program = service.get_program(asset_id)
     if program is not None:
+        # Populate source code from workspace
+        try:
+            source_code = service.read_workspace_file(asset_id, program.entrypoint)
+            program.source_code = source_code
+        except Exception:
+            # If source code can't be read, leave it as None
+            pass
         return AssetResponse(asset=program)
 
     model = service.get_model(asset_id)

@@ -121,6 +121,7 @@ class ProgramAsset(AssetMetadata):
     image_tag: str | None = Field(default=None, alias="imageTag")
     image_build_status: ImageBuildStatus | None = Field(default=None, alias="imageBuildStatus")
     image_build_error: str | None = Field(default=None, alias="imageBuildError")
+    source_code: str | None = Field(default=None, alias="sourceCode")
 
     class Config:
         populate_by_name = True
