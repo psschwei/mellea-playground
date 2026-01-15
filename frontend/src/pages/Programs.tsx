@@ -19,7 +19,7 @@ import {
   AlertDialogOverlay,
 } from '@chakra-ui/react';
 import { FiPlus, FiFile } from 'react-icons/fi';
-import { ProgramCard, CreateProgramModal } from '@/components/Programs';
+import { ProgramCard, ProgramCreationWizard } from '@/components/Programs';
 import { programsApi, runsApi } from '@/api';
 import type { ProgramAsset } from '@/types';
 
@@ -253,7 +253,7 @@ export function ProgramsPage() {
         </VStack>
       )}
 
-      <CreateProgramModal isOpen={isOpen} onClose={onClose} onCreated={handleProgramCreated} />
+      <ProgramCreationWizard isOpen={isOpen} onClose={onClose} onCreated={handleProgramCreated} />
 
       <AlertDialog
         isOpen={isDeleteOpen}
