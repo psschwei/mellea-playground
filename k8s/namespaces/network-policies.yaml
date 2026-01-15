@@ -67,6 +67,13 @@ spec:
       ports:
         - protocol: UDP
           port: 53
+    # Allow access to kind-registry (Docker network for local development)
+    - to:
+        - ipBlock:
+            cidr: 172.18.0.0/16
+      ports:
+        - protocol: TCP
+          port: 5000
     # Allow HTTPS for pip/package downloads
     - to:
         - ipBlock:
