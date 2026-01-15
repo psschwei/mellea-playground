@@ -1,5 +1,7 @@
 """Asset routes for creating and retrieving catalog assets."""
 
+import logging
+import time
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,18 +11,22 @@ from mellea_api.core.deps import CurrentUser
 from mellea_api.models.assets import (
     CompositionAsset,
     DependencySpec,
+    EndpointConfig,
     ModelAsset,
     ProgramAsset,
 )
 from mellea_api.models.build import BuildJob, BuildJobStatus, BuildResult
-from mellea_api.models.common import DependencySource, ImageBuildStatus
+from mellea_api.models.common import DependencySource, ImageBuildStatus, ModelProvider
 from mellea_api.services.assets import (
     AssetAlreadyExistsError,
     AssetService,
     get_asset_service,
 )
+from mellea_api.services.credentials import get_credential_service
 from mellea_api.services.environment_builder import get_environment_builder_service
 from mellea_api.services.kaniko_builder import get_kaniko_build_service
+
+logger = logging.getLogger(__name__)
 
 AssetServiceDep = Annotated[AssetService, Depends(get_asset_service)]
 
@@ -103,6 +109,27 @@ class DeleteAssetResponse(BaseModel):
 
     deleted: bool
     message: str
+
+
+class TestModelRequest(BaseModel):
+    """Request model for testing a model configuration."""
+
+    prompt: str = Field(default="Hello, this is a connectivity test.", description="Test prompt")
+
+    class Config:
+        populate_by_name = True
+
+
+class TestModelResponse(BaseModel):
+    """Response for model test operation."""
+
+    success: bool
+    response: str | None = None
+    error: str | None = None
+    latency_ms: float | None = Field(default=None, alias="latencyMs")
+
+    class Config:
+        populate_by_name = True
 
 
 @router.get("", response_model=AssetsListResponse)
@@ -536,3 +563,210 @@ async def delete_asset(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Asset not found: {asset_id}",
     )
+
+
+@router.post("/{asset_id}/test", response_model=TestModelResponse)
+async def test_model(
+    asset_id: str,
+    current_user: CurrentUser,
+    service: AssetServiceDep,
+    request: TestModelRequest | None = None,
+) -> TestModelResponse:
+    """Test a model's connectivity and configuration.
+
+    Sends a simple test prompt to the configured model to verify:
+    - Credentials are valid
+    - Endpoint is reachable
+    - Model responds correctly
+
+    Args:
+        asset_id: ID of the model asset to test
+        request: Optional test parameters
+
+    Returns:
+        Test result with success status, response, and latency.
+
+    Raises:
+        404: If the asset is not found
+        400: If the asset is not a model
+    """
+    # Get the model
+    model = service.get_model(asset_id)
+    if model is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model not found: {asset_id}",
+        )
+
+    # Get test prompt
+    test_prompt = request.prompt if request else "Hello, this is a connectivity test."
+
+    # Resolve credentials
+    api_key = None
+    if model.credentials_ref:
+        cred_service = get_credential_service()
+        secrets = cred_service.resolve_credentials_ref(model.credentials_ref)
+        if secrets:
+            # Look for common API key field names
+            for key_name in ["api_key", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "apiKey"]:
+                if key_name in secrets:
+                    api_key = secrets[key_name]
+                    break
+            # If no common key found, use the first value
+            if api_key is None and secrets:
+                api_key = next(iter(secrets.values()))
+
+    # Test the model based on provider
+    start_time = time.time()
+    try:
+        response_text = await _test_model_provider(
+            provider=model.provider,
+            model_id=model.model_id,
+            api_key=api_key,
+            endpoint=model.endpoint,
+            prompt=test_prompt,
+        )
+        latency_ms = (time.time() - start_time) * 1000
+
+        return TestModelResponse(
+            success=True,
+            response=response_text,
+            latencyMs=latency_ms,
+        )
+
+    except Exception as e:
+        latency_ms = (time.time() - start_time) * 1000
+        logger.warning(f"Model test failed for {asset_id}: {e}")
+        return TestModelResponse(
+            success=False,
+            error=str(e),
+            latencyMs=latency_ms,
+        )
+
+
+async def _test_model_provider(
+    provider: ModelProvider,
+    model_id: str,
+    api_key: str | None,
+    endpoint: EndpointConfig | None,
+    prompt: str,
+) -> str:
+    """Test connectivity to a specific model provider.
+
+    Args:
+        provider: The model provider
+        model_id: The model identifier
+        api_key: API key for authentication
+        endpoint: Optional custom endpoint config
+        prompt: Test prompt to send
+
+    Returns:
+        Response text from the model
+
+    Raises:
+        Exception: If the test fails
+    """
+    import httpx
+
+    if provider == ModelProvider.OPENAI:
+        base_url = endpoint.base_url if endpoint else "https://api.openai.com/v1"
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json={
+                    "model": model_id,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 50,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+
+    elif provider == ModelProvider.ANTHROPIC:
+        base_url = endpoint.base_url if endpoint else "https://api.anthropic.com"
+        headers = {
+            "x-api-key": api_key or "",
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{base_url}/v1/messages",
+                headers=headers,
+                json={
+                    "model": model_id,
+                    "max_tokens": 50,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["content"][0]["text"]
+
+    elif provider == ModelProvider.AZURE:
+        if not endpoint or not endpoint.base_url:
+            raise ValueError("Azure OpenAI requires an endpoint base URL")
+
+        api_version = endpoint.api_version or "2024-02-15-preview"
+        headers = {"api-key": api_key or ""}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{endpoint.base_url}/openai/deployments/{model_id}/chat/completions",
+                params={"api-version": api_version},
+                headers=headers,
+                json={
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 50,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+
+    elif provider == ModelProvider.OLLAMA:
+        base_url = endpoint.base_url if endpoint else "http://localhost:11434"
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{base_url}/api/generate",
+                json={
+                    "model": model_id,
+                    "prompt": prompt,
+                    "stream": False,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("response", "")
+
+    elif provider == ModelProvider.CUSTOM:
+        if not endpoint or not endpoint.base_url:
+            raise ValueError("Custom provider requires an endpoint base URL")
+
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        if endpoint.headers:
+            headers.update(endpoint.headers)
+
+        # Try OpenAI-compatible format
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{endpoint.base_url}/chat/completions",
+                headers=headers,
+                json={
+                    "model": model_id,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 50,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")

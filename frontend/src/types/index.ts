@@ -211,6 +211,76 @@ export interface LogStreamCompleteEvent {
   status: string;
 }
 
+// Model asset types
+export type ModelScope = 'chat' | 'agent' | 'composition' | 'all';
+
+export interface EndpointConfig {
+  baseUrl: string;
+  apiVersion?: string;
+  headers?: Record<string, string>;
+}
+
+export interface ModelParams {
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  stopSequences?: string[];
+}
+
+export interface ModelCapabilities {
+  contextWindow: number;
+  supportsStreaming?: boolean;
+  supportsToolCalling?: boolean;
+  supportedModalities?: string[];
+  languages?: string[];
+}
+
+export interface AccessControl {
+  endUsers?: boolean;
+  developers?: boolean;
+  admins?: boolean;
+}
+
+export interface ModelAsset extends AssetMetadata {
+  type: 'model';
+  provider: ModelProvider;
+  modelId: string;
+  endpoint?: EndpointConfig;
+  credentialsRef?: string;
+  defaultParams?: ModelParams;
+  capabilities?: ModelCapabilities;
+  accessControl?: AccessControl;
+  scope?: ModelScope;
+}
+
+export interface CreateModelRequest {
+  type: 'model';
+  name: string;
+  description?: string;
+  provider: ModelProvider;
+  modelId: string;
+  endpoint?: EndpointConfig;
+  credentialsRef?: string;
+  defaultParams?: ModelParams;
+  capabilities?: ModelCapabilities;
+  accessControl?: AccessControl;
+  scope?: ModelScope;
+  tags?: string[];
+}
+
+export interface TestModelRequest {
+  prompt?: string;
+}
+
+export interface TestModelResponse {
+  success: boolean;
+  response?: string;
+  error?: string;
+  latencyMs?: number;
+}
+
 // API response types
 export interface ApiError {
   detail: string;
