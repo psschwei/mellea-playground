@@ -54,6 +54,39 @@ export function ProgramDetailPage() {
   const [isBuilding, setIsBuilding] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
 
+  // Poll for updates when viewing an active run
+  useEffect(() => {
+    if (!currentRun) return;
+
+    const isActive =
+      currentRun.status === 'queued' ||
+      currentRun.status === 'starting' ||
+      currentRun.status === 'running';
+
+    if (!isActive) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const updated = await runsApi.get(currentRun.id);
+        setCurrentRun(updated);
+
+        // Stop polling if run completed
+        if (
+          updated.status !== 'queued' &&
+          updated.status !== 'starting' &&
+          updated.status !== 'running'
+        ) {
+          clearInterval(pollInterval);
+          loadRuns(); // Refresh the runs list
+        }
+      } catch (error) {
+        console.error('Failed to poll run status:', error);
+      }
+    }, 1000);
+
+    return () => clearInterval(pollInterval);
+  }, [currentRun?.id, currentRun?.status]);
+
   const loadProgram = useCallback(async () => {
     if (!id) return;
     try {

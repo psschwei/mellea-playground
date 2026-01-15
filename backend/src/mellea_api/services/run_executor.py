@@ -288,25 +288,32 @@ class RunExecutor:
             return run
 
         # Update based on target status
+        updated_run = run
         if target_status == RunExecutionStatus.RUNNING:
-            return self.run_service.mark_running(run.id, output=output)
+            updated_run = self.run_service.mark_running(run.id, output=output)
         elif target_status == RunExecutionStatus.SUCCEEDED:
-            return self.run_service.mark_succeeded(
+            updated_run = self.run_service.mark_succeeded(
                 run.id,
                 exit_code=job_info.exit_code or 0,
                 output=output,
             )
         elif target_status == RunExecutionStatus.FAILED:
-            return self.run_service.mark_failed(
+            updated_run = self.run_service.mark_failed(
                 run.id,
                 exit_code=job_info.exit_code,
                 error=job_info.error_message,
                 output=output,
             )
 
-        # For STARTING status (from PENDING job), no update needed
-        # as the run is already in STARTING
-        return run
+        # Clean up K8s job after run completes (terminal state)
+        if updated_run.is_terminal() and run.job_name:
+            try:
+                self.k8s_service.delete_job(run.job_name)
+                logger.info("Cleaned up completed K8s job %s for run %s", run.job_name, run.id)
+            except Exception as e:
+                logger.warning("Failed to clean up job %s: %s", run.job_name, e)
+
+        return updated_run
 
     def cancel_run(self, run_id: str, force: bool = False) -> Run:
         """Cancel a run and its K8s job with graceful shutdown.
