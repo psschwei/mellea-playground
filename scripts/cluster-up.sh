@@ -27,6 +27,22 @@ kind create cluster --config k8s/kind-config.yaml
 echo "==> Waiting for cluster to be ready..."
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
 
+# Configure containerd to use insecure local registry (containerd 2.x)
+echo "==> Configuring local registry..."
+docker exec "${CLUSTER_NAME}-control-plane" bash -c '
+mkdir -p /etc/containerd/certs.d/kind-registry:5000
+cat > /etc/containerd/certs.d/kind-registry:5000/hosts.toml <<EOF
+server = "http://kind-registry:5000"
+
+[host."http://kind-registry:5000"]
+  capabilities = ["pull", "resolve", "push"]
+  skip_verify = true
+EOF
+systemctl restart containerd
+'
+# Wait for containerd to restart
+sleep 3
+
 # Apply namespaces
 echo "==> Creating namespaces..."
 kubectl apply -f k8s/namespaces/namespaces.yaml
