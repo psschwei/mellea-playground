@@ -20,10 +20,12 @@ from mellea_api.routes import (
     environments_router,
     github_import_router,
     health_router,
+    retention_router,
     runs_router,
 )
 from mellea_api.services.auth import get_auth_service
 from mellea_api.services.idle_timeout import get_idle_timeout_controller
+from mellea_api.services.retention_policy import get_retention_policy_controller
 from mellea_api.services.run_executor import get_run_executor_controller
 from mellea_api.services.warmup import get_warmup_controller
 
@@ -42,6 +44,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     idle_controller = get_idle_timeout_controller()
     warmup_controller = get_warmup_controller()
     run_executor_controller = get_run_executor_controller()
+    retention_controller = get_retention_policy_controller()
 
     # Startup
     logger.info(f"Starting {settings.app_name} in {settings.environment} mode")
@@ -60,6 +63,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await idle_controller.start()
     await warmup_controller.start()
     await run_executor_controller.start()
+    await retention_controller.start()
 
     yield
 
@@ -67,6 +71,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Shutting down...")
 
     # Stop background controllers
+    await retention_controller.stop()
     await run_executor_controller.stop()
     await warmup_controller.stop()
     await idle_controller.stop()
@@ -108,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(github_import_router)
     app.include_router(archive_upload_router)
     app.include_router(runs_router)
+    app.include_router(retention_router)
     app.include_router(controller_router)
 
     return app

@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     artifact_max_single_size_mb: int = 100  # Max size for a single artifact (100MB)
     artifact_cleanup_interval_seconds: int = 3600  # Clean up expired artifacts hourly
 
+    # Retention Policy Controller
+    retention_policy_enabled: bool = True
+    retention_policy_interval_seconds: int = 3600  # 1 hour between cleanup cycles
+
     def ensure_data_dirs(self) -> None:
         """Create data directory structure if it doesn't exist."""
         subdirs = ["metadata", "workspaces", "artifacts", "runs"]
