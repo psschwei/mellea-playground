@@ -35,7 +35,7 @@ import {
   Checkbox,
   Tooltip,
 } from '@chakra-ui/react';
-import { FiArrowLeft, FiPlay, FiClock, FiTrash2 } from 'react-icons/fi';
+import { FiArrowLeft, FiPlay, FiClock, FiTrash2, FiRefreshCw } from 'react-icons/fi';
 
 // Helper to check if a run can be deleted (must be in terminal state)
 function isTerminalStatus(status: string): boolean {
@@ -292,6 +292,13 @@ export function ProgramDetailPage() {
     }
   };
 
+  const handleRetryRun = async () => {
+    if (!program) return;
+
+    // Just trigger a new run - same as clicking the Run button
+    handleRun();
+  };
+
   const handleDeleteConfirm = async () => {
     if (!program) return;
 
@@ -525,6 +532,7 @@ export function ProgramDetailPage() {
                 <RunPanel
                   run={currentRun}
                   onCancel={handleCancelRun}
+                  onRetry={handleRetryRun}
                   onClose={() => setCurrentRun(null)}
                 />
               )}
@@ -564,6 +572,7 @@ export function ProgramDetailPage() {
                   <RunPanel
                     run={currentRun}
                     onCancel={handleCancelRun}
+                    onRetry={handleRetryRun}
                     onClose={() => setCurrentRun(null)}
                   />
                 ) : null}
@@ -604,12 +613,13 @@ export function ProgramDetailPage() {
                         <Th>Started</Th>
                         <Th>Duration</Th>
                         <Th>Exit Code</Th>
-                        <Th w="60px">Actions</Th>
+                        <Th w="100px">Actions</Th>
                       </Tr>
                     </Thead>
                     <Tbody>
                       {runs.map((run) => {
                         const canDelete = isTerminalStatus(run.status);
+                        const canRetry = run.status === 'failed' || run.status === 'cancelled';
                         return (
                           <Tr
                             key={run.id}
@@ -636,17 +646,34 @@ export function ProgramDetailPage() {
                             <Td>{formatDuration(run.metrics?.totalDurationMs)}</Td>
                             <Td>{run.exitCode ?? '-'}</Td>
                             <Td>
-                              <Tooltip label={canDelete ? 'Delete run' : 'Cannot delete active runs'}>
-                                <IconButton
-                                  aria-label="Delete run"
-                                  icon={<FiTrash2 />}
-                                  size="xs"
-                                  variant="ghost"
-                                  colorScheme="red"
-                                  isDisabled={!canDelete}
-                                  onClick={(e) => handleDeleteRun(run, e)}
-                                />
-                              </Tooltip>
+                              <HStack spacing={1}>
+                                {canRetry && (
+                                  <Tooltip label="Retry run">
+                                    <IconButton
+                                      aria-label="Retry run"
+                                      icon={<FiRefreshCw />}
+                                      size="xs"
+                                      variant="ghost"
+                                      colorScheme="blue"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRetryRun();
+                                      }}
+                                    />
+                                  </Tooltip>
+                                )}
+                                <Tooltip label={canDelete ? 'Delete run' : 'Cannot delete active runs'}>
+                                  <IconButton
+                                    aria-label="Delete run"
+                                    icon={<FiTrash2 />}
+                                    size="xs"
+                                    variant="ghost"
+                                    colorScheme="red"
+                                    isDisabled={!canDelete}
+                                    onClick={(e) => handleDeleteRun(run, e)}
+                                  />
+                                </Tooltip>
+                              </HStack>
                             </Td>
                           </Tr>
                         );

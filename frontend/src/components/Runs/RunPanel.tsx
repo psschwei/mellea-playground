@@ -12,7 +12,7 @@ import {
   Collapse,
   IconButton,
 } from '@chakra-ui/react';
-import { FiX, FiChevronDown, FiChevronUp, FiClock, FiTerminal } from 'react-icons/fi';
+import { FiX, FiChevronDown, FiChevronUp, FiClock, FiTerminal, FiRefreshCw } from 'react-icons/fi';
 import { useState } from 'react';
 import { RunStatusBadge } from './RunStatusBadge';
 import type { Run } from '@/types';
@@ -20,6 +20,7 @@ import type { Run } from '@/types';
 interface RunPanelProps {
   run: Run | null;
   onCancel?: () => void;
+  onRetry?: () => void;
   onClose?: () => void;
   isMinimizable?: boolean;
 }
@@ -36,7 +37,7 @@ function formatTime(dateString?: string): string {
   return new Date(dateString).toLocaleTimeString();
 }
 
-export function RunPanel({ run, onCancel, onClose, isMinimizable = true }: RunPanelProps) {
+export function RunPanel({ run, onCancel, onRetry, onClose, isMinimizable = true }: RunPanelProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const bg = useColorModeValue('white', 'gray.800');
   const outputBg = useColorModeValue('gray.900', 'gray.900');
@@ -57,6 +58,7 @@ export function RunPanel({ run, onCancel, onClose, isMinimizable = true }: RunPa
   }
 
   const isActive = run.status === 'queued' || run.status === 'starting' || run.status === 'running';
+  const isRetryable = run.status === 'failed' || run.status === 'cancelled';
   const hasError = run.status === 'failed' && run.errorMessage;
 
   return (
@@ -71,6 +73,17 @@ export function RunPanel({ run, onCancel, onClose, isMinimizable = true }: RunPa
             {isActive && onCancel && (
               <Button size="xs" colorScheme="red" variant="outline" onClick={onCancel}>
                 Cancel
+              </Button>
+            )}
+            {isRetryable && onRetry && (
+              <Button
+                size="xs"
+                colorScheme="blue"
+                variant="outline"
+                leftIcon={<FiRefreshCw />}
+                onClick={onRetry}
+              >
+                Retry
               </Button>
             )}
             {isMinimizable && (
