@@ -24,6 +24,7 @@ from mellea_api.services.environment_builder import (
     get_environment_builder_service,
 )
 from mellea_api.services.log import LogService, get_log_service
+from mellea_api.services.quota import QuotaExceededError, QuotaService, get_quota_service
 from mellea_api.services.run import (
     InvalidRunStateTransitionError,
     RunNotDeletableError,
@@ -34,6 +35,7 @@ from mellea_api.services.run import (
 from mellea_api.services.run_executor import RunExecutor, get_run_executor
 
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
+QuotaServiceDep = Annotated[QuotaService, Depends(get_quota_service)]
 RunExecutorDep = Annotated[RunExecutor, Depends(get_run_executor)]
 EnvironmentServiceDep = Annotated[EnvironmentService, Depends(get_environment_service)]
 AssetServiceDep = Annotated[AssetService, Depends(get_asset_service)]
@@ -100,6 +102,7 @@ async def create_run(
     request: CreateRunRequest,
     current_user: CurrentUser,
     run_service: RunServiceDep,
+    quota_service: QuotaServiceDep,
     asset_service: AssetServiceDep,
     env_service: EnvironmentServiceDep,
     credential_service: CredentialServiceDep,
@@ -116,6 +119,19 @@ async def create_run(
 
     The run will be executed asynchronously by the run executor.
     """
+    # Check user quotas before creating run
+    try:
+        quota_service.check_can_create_run(
+            user_id=current_user.id,
+            user_quotas=current_user.quotas,
+            run_service=run_service,
+        )
+    except QuotaExceededError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        ) from e
+
     # Verify the program exists
     program = asset_service.get_program(request.program_id)
     if program is None:
@@ -213,10 +229,14 @@ async def create_run(
 
     # Create the run
     run = run_service.create_run(
+        owner_id=current_user.id,
         environment_id=environment.id,
         program_id=request.program_id,
         credential_ids=request.credential_ids,
     )
+
+    # Record run created for quota tracking
+    quota_service.record_run_created(current_user.id)
 
     return RunResponse(run=run)
 

@@ -21,6 +21,9 @@ from mellea_api.services.retention_policy import (
 )
 from mellea_api.services.run import RunService
 
+# Test constants
+TEST_OWNER_ID = "test-user-123"
+
 
 @pytest.fixture
 def temp_data_dir():
@@ -257,7 +260,7 @@ class TestPolicyEvaluation:
     ):
         """Test evaluating age-based run policy."""
         # Create a completed run
-        run = run_service.create_run(environment_id="env-123", program_id="prog-123")
+        run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id="env-123", program_id="prog-123")
         run_service.start_run(run.id, job_name="job-123")
         run_service.mark_running(run.id)
         run_service.mark_succeeded(run.id)
@@ -288,7 +291,7 @@ class TestPolicyEvaluation:
     ):
         """Test evaluating status-based run policy."""
         # Create a failed run
-        run = run_service.create_run(environment_id="env-123", program_id="prog-123")
+        run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id="env-123", program_id="prog-123")
         run_service.start_run(run.id, job_name="job-123")
         run_service.mark_running(run.id)
         run_service.mark_failed(run.id, error="Test failure")
@@ -346,7 +349,7 @@ class TestPolicyEvaluation:
         run_service: RunService,
     ):
         """Test that running runs are not matched by policies."""
-        run = run_service.create_run(environment_id="env-123", program_id="prog-123")
+        run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id="env-123", program_id="prog-123")
         run_service.start_run(run.id, job_name="job-123")
         run_service.mark_running(run.id)
         # Don't complete it
@@ -373,7 +376,7 @@ class TestPolicyPreview:
         """Test previewing what a policy would delete."""
         # Create old completed runs
         for i in range(3):
-            run = run_service.create_run(environment_id=f"env-{i}", program_id="prog-123")
+            run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id=f"env-{i}", program_id="prog-123")
             run_service.start_run(run.id, job_name=f"job-{i}")
             run_service.mark_running(run.id)
             run_service.mark_succeeded(run.id)
@@ -425,7 +428,7 @@ class TestCleanupCycle:
         # Create old completed runs
         run_ids = []
         for i in range(2):
-            run = run_service.create_run(environment_id=f"env-{i}", program_id="prog-123")
+            run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id=f"env-{i}", program_id="prog-123")
             run_service.start_run(run.id, job_name=f"job-{i}")
             run_service.mark_running(run.id)
             run_service.mark_succeeded(run.id)
@@ -460,7 +463,7 @@ class TestCleanupCycle:
     ):
         """Test that disabled policies are not evaluated."""
         # Create old run
-        run = run_service.create_run(environment_id="env-123", program_id="prog-123")
+        run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id="env-123", program_id="prog-123")
         run_service.start_run(run.id, job_name="job-123")
         run_service.mark_running(run.id)
         run_service.mark_succeeded(run.id)

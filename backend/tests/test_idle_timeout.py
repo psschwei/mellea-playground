@@ -16,6 +16,9 @@ from mellea_api.services.idle_timeout import (
 )
 from mellea_api.services.run import RunService
 
+# Test constants
+TEST_OWNER_ID = "test-user-123"
+
 
 @pytest.fixture
 def temp_data_dir():
@@ -132,7 +135,7 @@ class TestIdleEnvironmentDetection:
         env_service.environment_store.update(env.id, env_updated)
 
         # Create a recent run that completed
-        run = run_service.create_run(environment_id=env.id, program_id="prog-123")
+        run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id=env.id, program_id="prog-123")
         run_service.start_run(run.id, job_name="job-123")
         run_service.mark_running(run.id)
         run_service.mark_succeeded(run.id)
@@ -156,7 +159,7 @@ class TestStaleRunDetection:
         run_service: RunService,
     ):
         """Test that recently completed runs are not considered stale."""
-        run = run_service.create_run(environment_id="env-123", program_id="prog-123")
+        run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id="env-123", program_id="prog-123")
         run_service.start_run(run.id, job_name="job-123")
         run_service.mark_running(run.id)
         run_service.mark_succeeded(run.id)
@@ -171,7 +174,7 @@ class TestStaleRunDetection:
         settings: Settings,
     ):
         """Test that runs are detected as stale after retention period."""
-        run = run_service.create_run(environment_id="env-123", program_id="prog-123")
+        run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id="env-123", program_id="prog-123")
         run_service.start_run(run.id, job_name="job-123")
         run_service.mark_running(run.id)
         run_service.mark_succeeded(run.id)
@@ -196,7 +199,7 @@ class TestStaleRunDetection:
         settings: Settings,
     ):
         """Test that failed runs are also detected as stale."""
-        run = run_service.create_run(environment_id="env-123", program_id="prog-123")
+        run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id="env-123", program_id="prog-123")
         run_service.start_run(run.id, job_name="job-123")
         run_service.mark_running(run.id)
         run_service.mark_failed(run.id, error="Test failure")
@@ -266,7 +269,7 @@ class TestCleanupOperations:
         run_service: RunService,
     ):
         """Test deleting a stale run."""
-        run = run_service.create_run(environment_id="env-123", program_id="prog-123")
+        run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id="env-123", program_id="prog-123")
         run_service.start_run(run.id, job_name="job-123")
         run_service.mark_running(run.id)
         run_service.mark_succeeded(run.id)
@@ -325,7 +328,7 @@ class TestCleanupCycle:
         env_service.update_status(env.id, EnvironmentStatus.READY)
 
         # Create a run that will be stale
-        run = run_service.create_run(environment_id="env-123", program_id="prog-123")
+        run = run_service.create_run(owner_id=TEST_OWNER_ID, environment_id="env-123", program_id="prog-123")
         run_service.start_run(run.id, job_name="job-123")
         run_service.mark_running(run.id)
         run_service.mark_succeeded(run.id)

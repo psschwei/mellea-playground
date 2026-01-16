@@ -9,6 +9,9 @@ from mellea_api.models.run import (
     is_terminal_status,
 )
 
+# Test constants
+TEST_OWNER_ID = "test-user-123"
+
 
 class TestRunModel:
     """Tests for the Run model."""
@@ -16,6 +19,7 @@ class TestRunModel:
     def test_create_run_default_status(self):
         """Test that new runs start in QUEUED status."""
         run = Run(
+            owner_id=TEST_OWNER_ID,
             environment_id="env-123",
             program_id="prog-456",
         )
@@ -30,14 +34,15 @@ class TestRunModel:
 
     def test_create_run_generates_uuid(self):
         """Test that run IDs are auto-generated."""
-        run1 = Run(environment_id="env-1", program_id="prog-1")
-        run2 = Run(environment_id="env-2", program_id="prog-2")
+        run1 = Run(owner_id=TEST_OWNER_ID, environment_id="env-1", program_id="prog-1")
+        run2 = Run(owner_id=TEST_OWNER_ID, environment_id="env-2", program_id="prog-2")
         assert run1.id != run2.id
         assert len(run1.id) == 36  # UUID format
 
     def test_create_run_with_all_fields(self):
         """Test creating a run with all fields specified."""
         run = Run(
+            owner_id=TEST_OWNER_ID,
             environment_id="env-123",
             program_id="prog-456",
             status=RunExecutionStatus.RUNNING,
@@ -53,7 +58,7 @@ class TestRunModel:
 
     def test_run_created_at_auto_set(self):
         """Test that created_at is automatically set."""
-        run = Run(environment_id="env-1", program_id="prog-1")
+        run = Run(owner_id=TEST_OWNER_ID, environment_id="env-1", program_id="prog-1")
         assert run.created_at is not None
 
 
@@ -173,12 +178,13 @@ class TestRunMethods:
 
     def test_is_terminal_on_queued_run(self):
         """Test is_terminal() returns False for QUEUED run."""
-        run = Run(environment_id="env-1", program_id="prog-1")
+        run = Run(owner_id=TEST_OWNER_ID, environment_id="env-1", program_id="prog-1")
         assert not run.is_terminal()
 
     def test_is_terminal_on_succeeded_run(self):
         """Test is_terminal() returns True for SUCCEEDED run."""
         run = Run(
+            owner_id=TEST_OWNER_ID,
             environment_id="env-1",
             program_id="prog-1",
             status=RunExecutionStatus.SUCCEEDED,
@@ -188,6 +194,7 @@ class TestRunMethods:
     def test_is_terminal_on_failed_run(self):
         """Test is_terminal() returns True for FAILED run."""
         run = Run(
+            owner_id=TEST_OWNER_ID,
             environment_id="env-1",
             program_id="prog-1",
             status=RunExecutionStatus.FAILED,
@@ -196,7 +203,7 @@ class TestRunMethods:
 
     def test_can_transition_to_from_queued(self):
         """Test can_transition_to() on QUEUED run."""
-        run = Run(environment_id="env-1", program_id="prog-1")
+        run = Run(owner_id=TEST_OWNER_ID, environment_id="env-1", program_id="prog-1")
         assert run.can_transition_to(RunExecutionStatus.STARTING)
         assert run.can_transition_to(RunExecutionStatus.CANCELLED)
         assert not run.can_transition_to(RunExecutionStatus.RUNNING)
@@ -204,6 +211,7 @@ class TestRunMethods:
     def test_can_transition_to_from_running(self):
         """Test can_transition_to() on RUNNING run."""
         run = Run(
+            owner_id=TEST_OWNER_ID,
             environment_id="env-1",
             program_id="prog-1",
             status=RunExecutionStatus.RUNNING,
@@ -216,6 +224,7 @@ class TestRunMethods:
     def test_can_transition_to_from_terminal(self):
         """Test can_transition_to() returns False for all statuses on terminal run."""
         run = Run(
+            owner_id=TEST_OWNER_ID,
             environment_id="env-1",
             program_id="prog-1",
             status=RunExecutionStatus.SUCCEEDED,
@@ -230,7 +239,7 @@ class TestRunLifecycleScenarios:
     def test_successful_run_lifecycle(self):
         """Test a successful run through all states."""
         # Create run (QUEUED)
-        run = Run(environment_id="env-1", program_id="prog-1")
+        run = Run(owner_id=TEST_OWNER_ID, environment_id="env-1", program_id="prog-1")
         assert run.status == RunExecutionStatus.QUEUED
 
         # Valid transition: QUEUED -> STARTING
@@ -250,7 +259,7 @@ class TestRunLifecycleScenarios:
 
     def test_failed_run_lifecycle(self):
         """Test a run that fails during execution."""
-        run = Run(environment_id="env-1", program_id="prog-1")
+        run = Run(owner_id=TEST_OWNER_ID, environment_id="env-1", program_id="prog-1")
 
         # Progress to RUNNING
         run.status = RunExecutionStatus.STARTING
@@ -263,7 +272,7 @@ class TestRunLifecycleScenarios:
 
     def test_cancelled_before_start(self):
         """Test a run cancelled before it starts."""
-        run = Run(environment_id="env-1", program_id="prog-1")
+        run = Run(owner_id=TEST_OWNER_ID, environment_id="env-1", program_id="prog-1")
 
         # Cancel from QUEUED
         assert run.can_transition_to(RunExecutionStatus.CANCELLED)
@@ -272,7 +281,7 @@ class TestRunLifecycleScenarios:
 
     def test_cancelled_during_execution(self):
         """Test a run cancelled while running."""
-        run = Run(environment_id="env-1", program_id="prog-1")
+        run = Run(owner_id=TEST_OWNER_ID, environment_id="env-1", program_id="prog-1")
 
         # Progress to RUNNING
         run.status = RunExecutionStatus.STARTING
@@ -285,7 +294,7 @@ class TestRunLifecycleScenarios:
 
     def test_startup_failure(self):
         """Test a run that fails during startup."""
-        run = Run(environment_id="env-1", program_id="prog-1")
+        run = Run(owner_id=TEST_OWNER_ID, environment_id="env-1", program_id="prog-1")
 
         # Attempt to start
         run.status = RunExecutionStatus.STARTING

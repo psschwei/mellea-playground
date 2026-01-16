@@ -19,9 +19,13 @@ from mellea_api.services.auth import (
     RegistrationError,
     get_auth_service,
 )
+from mellea_api.services.quota import QuotaService, get_quota_service
+from mellea_api.services.run import RunService, get_run_service
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+QuotaServiceDep = Annotated[QuotaService, Depends(get_quota_service)]
+RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -85,6 +89,27 @@ async def get_current_user_info(
 ) -> UserPublic:
     """Get the current authenticated user's information."""
     return UserPublic.model_validate(current_user)
+
+
+@router.get("/me/quotas")
+async def get_quota_status(
+    current_user: CurrentUser,
+    quota_service: QuotaServiceDep,
+    run_service: RunServiceDep,
+) -> dict:
+    """Get the current user's quota status and usage.
+
+    Returns current usage and limits for:
+    - concurrent_runs: Number of active runs (queued, starting, running)
+    - daily_runs: Number of runs created today
+    - cpu_hours_month: CPU hours used this month
+    - storage_mb: Storage quota limit
+    """
+    return quota_service.get_quota_status(
+        user_id=current_user.id,
+        user_quotas=current_user.quotas,
+        run_service=run_service,
+    )
 
 
 @router.post("/logout")

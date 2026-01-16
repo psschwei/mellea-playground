@@ -35,6 +35,10 @@ def run_service(settings: Settings):
     return RunService(settings=settings)
 
 
+# Test constants
+TEST_OWNER_ID = "test-user-123"
+
+
 class TestStateTransitionValidation:
     """Tests for state machine transition validation."""
 
@@ -98,6 +102,7 @@ class TestCreateRun:
     def test_create_run_basic(self, run_service: RunService):
         """Test basic run creation."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id="env-123",
             program_id="prog-456",
         )
@@ -112,8 +117,8 @@ class TestCreateRun:
 
     def test_create_run_unique_ids(self, run_service: RunService):
         """Test that each run gets a unique ID."""
-        run1 = run_service.create_run("env-1", "prog-1")
-        run2 = run_service.create_run("env-2", "prog-2")
+        run1 = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
+        run2 = run_service.create_run(TEST_OWNER_ID, "env-2", "prog-2")
         assert run1.id != run2.id
 
 
@@ -122,7 +127,7 @@ class TestGetRun:
 
     def test_get_run_exists(self, run_service: RunService):
         """Test getting an existing run."""
-        created = run_service.create_run("env-1", "prog-1")
+        created = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         fetched = run_service.get_run(created.id)
 
         assert fetched is not None
@@ -145,18 +150,18 @@ class TestListRuns:
 
     def test_list_runs_all(self, run_service: RunService):
         """Test listing all runs."""
-        run_service.create_run("env-1", "prog-1")
-        run_service.create_run("env-2", "prog-2")
-        run_service.create_run("env-3", "prog-3")
+        run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
+        run_service.create_run(TEST_OWNER_ID, "env-2", "prog-2")
+        run_service.create_run(TEST_OWNER_ID, "env-3", "prog-3")
 
         runs = run_service.list_runs()
         assert len(runs) == 3
 
     def test_list_runs_filter_by_environment(self, run_service: RunService):
         """Test filtering runs by environment ID."""
-        run_service.create_run("env-1", "prog-1")
-        run_service.create_run("env-1", "prog-2")
-        run_service.create_run("env-2", "prog-3")
+        run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
+        run_service.create_run(TEST_OWNER_ID, "env-1", "prog-2")
+        run_service.create_run(TEST_OWNER_ID, "env-2", "prog-3")
 
         runs = run_service.list_runs(environment_id="env-1")
         assert len(runs) == 2
@@ -164,9 +169,9 @@ class TestListRuns:
 
     def test_list_runs_filter_by_program(self, run_service: RunService):
         """Test filtering runs by program ID."""
-        run_service.create_run("env-1", "prog-1")
-        run_service.create_run("env-2", "prog-1")
-        run_service.create_run("env-3", "prog-2")
+        run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
+        run_service.create_run(TEST_OWNER_ID, "env-2", "prog-1")
+        run_service.create_run(TEST_OWNER_ID, "env-3", "prog-2")
 
         runs = run_service.list_runs(program_id="prog-1")
         assert len(runs) == 2
@@ -174,8 +179,8 @@ class TestListRuns:
 
     def test_list_runs_filter_by_status(self, run_service: RunService):
         """Test filtering runs by status."""
-        run1 = run_service.create_run("env-1", "prog-1")
-        run_service.create_run("env-2", "prog-2")
+        run1 = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
+        run_service.create_run(TEST_OWNER_ID, "env-2", "prog-2")
 
         # Start one run
         run_service.start_run(run1.id, "job-1")
@@ -192,7 +197,7 @@ class TestStartRun:
 
     def test_start_run_success(self, run_service: RunService):
         """Test successful run start."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         started = run_service.start_run(run.id, "mellea-run-abc12345")
 
         assert started.status == RunExecutionStatus.STARTING
@@ -205,7 +210,7 @@ class TestStartRun:
 
     def test_start_run_invalid_state(self, run_service: RunService):
         """Test starting a run that's already running."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
         run_service.mark_running(run.id)
 
@@ -219,7 +224,7 @@ class TestCancelRun:
 
     def test_cancel_queued_run(self, run_service: RunService):
         """Test cancelling a queued run."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         cancelled = run_service.cancel_run(run.id)
 
         assert cancelled.status == RunExecutionStatus.CANCELLED
@@ -227,7 +232,7 @@ class TestCancelRun:
 
     def test_cancel_running_run(self, run_service: RunService):
         """Test cancelling a running run."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
         run_service.mark_running(run.id)
 
@@ -241,7 +246,7 @@ class TestCancelRun:
 
     def test_cancel_invalid_state(self, run_service: RunService):
         """Test cancelling a run in terminal state."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
         run_service.mark_running(run.id)
         run_service.mark_succeeded(run.id)
@@ -255,7 +260,7 @@ class TestMarkRunning:
 
     def test_mark_running_success(self, run_service: RunService):
         """Test marking a starting run as running."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
 
         running = run_service.mark_running(run.id)
@@ -265,7 +270,7 @@ class TestMarkRunning:
 
     def test_mark_running_invalid_state(self, run_service: RunService):
         """Test marking a queued run as running (should fail)."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
 
         with pytest.raises(InvalidRunStateTransitionError):
             run_service.mark_running(run.id)
@@ -276,7 +281,7 @@ class TestMarkSucceeded:
 
     def test_mark_succeeded_basic(self, run_service: RunService):
         """Test marking a running run as succeeded."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
         run_service.mark_running(run.id)
 
@@ -288,7 +293,7 @@ class TestMarkSucceeded:
 
     def test_mark_succeeded_with_exit_code(self, run_service: RunService):
         """Test marking succeeded with custom exit code."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
         run_service.mark_running(run.id)
 
@@ -297,7 +302,7 @@ class TestMarkSucceeded:
 
     def test_mark_succeeded_with_output_path(self, run_service: RunService):
         """Test marking succeeded with output path."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
         run_service.mark_running(run.id)
 
@@ -312,7 +317,7 @@ class TestMarkFailed:
 
     def test_mark_failed_from_running(self, run_service: RunService):
         """Test marking a running run as failed."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
         run_service.mark_running(run.id)
 
@@ -325,7 +330,7 @@ class TestMarkFailed:
 
     def test_mark_failed_from_starting(self, run_service: RunService):
         """Test marking a starting run as failed (job creation failure)."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
 
         failed = run_service.mark_failed(run.id, error="Failed to create K8s job")
@@ -340,7 +345,7 @@ class TestFullLifecycle:
     def test_successful_run_lifecycle(self, run_service: RunService):
         """Test a complete successful run lifecycle."""
         # Create
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         assert run.status == RunExecutionStatus.QUEUED
 
         # Start
@@ -362,7 +367,7 @@ class TestFullLifecycle:
 
     def test_failed_run_lifecycle(self, run_service: RunService):
         """Test a run that fails during execution."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
         run_service.mark_running(run.id)
 
@@ -374,7 +379,7 @@ class TestFullLifecycle:
 
     def test_cancelled_before_start(self, run_service: RunService):
         """Test cancelling a run before it starts."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run = run_service.cancel_run(run.id)
 
         assert run.status == RunExecutionStatus.CANCELLED
@@ -382,7 +387,7 @@ class TestFullLifecycle:
 
     def test_cancelled_during_execution(self, run_service: RunService):
         """Test cancelling a run during execution."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
         run_service.mark_running(run.id)
 
@@ -391,7 +396,7 @@ class TestFullLifecycle:
 
     def test_startup_failure(self, run_service: RunService):
         """Test a run that fails during K8s job creation."""
-        run = run_service.create_run("env-1", "prog-1")
+        run = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
         run_service.start_run(run.id, "job-1")
 
         run = run_service.mark_failed(run.id, error="ImagePullBackOff")
@@ -401,9 +406,9 @@ class TestFullLifecycle:
 
     def test_multiple_runs_same_program(self, run_service: RunService):
         """Test multiple runs of the same program."""
-        run1 = run_service.create_run("env-1", "prog-1")
-        run2 = run_service.create_run("env-1", "prog-1")
-        run3 = run_service.create_run("env-1", "prog-1")
+        run1 = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
+        run2 = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
+        run3 = run_service.create_run(TEST_OWNER_ID, "env-1", "prog-1")
 
         # Complete run1
         run_service.start_run(run1.id, "job-1")

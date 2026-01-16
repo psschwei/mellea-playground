@@ -56,6 +56,7 @@ class Run(BaseModel):
     Example:
         ```python
         run = Run(
+            ownerId="user-789",
             environmentId="env-123",
             programId="prog-456",
         )
@@ -64,6 +65,7 @@ class Run(BaseModel):
 
     Attributes:
         id: Unique identifier for this run
+        owner_id: ID of the User who created this run
         environment_id: ID of the Environment used for this run
         program_id: ID of the ProgramAsset being run
         status: Current execution status
@@ -78,6 +80,7 @@ class Run(BaseModel):
     """
 
     id: str = Field(default_factory=generate_uuid)
+    owner_id: str = Field(alias="ownerId", description="User ID who created this run")
     environment_id: str = Field(alias="environmentId")
     program_id: str = Field(alias="programId")
     status: RunExecutionStatus = RunExecutionStatus.QUEUED

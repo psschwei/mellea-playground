@@ -18,6 +18,7 @@ from mellea_api.services.environment import EnvironmentService, get_environment_
 from mellea_api.services.k8s_jobs import K8sJobService, get_k8s_job_service
 from mellea_api.services.kaniko_builder import KanikoBuildService, get_kaniko_build_service
 from mellea_api.services.log import LogService, get_log_service
+from mellea_api.services.quota import QuotaService, get_quota_service
 from mellea_api.services.run import RunNotFoundError, RunService, get_run_service
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,7 @@ class RunExecutor:
         environment_service: EnvironmentService | None = None,
         credential_service: CredentialService | None = None,
         log_service: LogService | None = None,
+        quota_service: QuotaService | None = None,
     ) -> None:
         """Initialize the RunExecutor.
 
@@ -101,12 +103,14 @@ class RunExecutor:
             environment_service: EnvironmentService instance (uses global if not provided)
             credential_service: CredentialService instance (uses global if not provided)
             log_service: LogService instance (uses global if not provided)
+            quota_service: QuotaService instance (uses global if not provided)
         """
         self._run_service = run_service
         self._k8s_service = k8s_service
         self._environment_service = environment_service
         self._credential_service = credential_service
         self._log_service = log_service
+        self._quota_service = quota_service
 
     @property
     def run_service(self) -> RunService:
@@ -142,6 +146,13 @@ class RunExecutor:
         if self._log_service is None:
             self._log_service = get_log_service()
         return self._log_service
+
+    @property
+    def quota_service(self) -> QuotaService:
+        """Get the QuotaService, using global instance if not set."""
+        if self._quota_service is None:
+            self._quota_service = get_quota_service()
+        return self._quota_service
 
     def submit_run(
         self,
@@ -325,6 +336,21 @@ class RunExecutor:
         # Publish logs to Redis for real-time streaming
         if output:
             self.log_service.publish_logs_sync(run.id, output, is_complete=is_terminal)
+
+        # Track CPU hours when run completes (terminal state)
+        if is_terminal and updated_run.started_at and updated_run.completed_at:
+            cpu_hours = self.quota_service.calculate_cpu_hours(
+                started_at=updated_run.started_at,
+                completed_at=updated_run.completed_at,
+                cpu_cores=1.0,  # Default to 1 CPU core
+            )
+            self.quota_service.record_cpu_hours(updated_run.owner_id, cpu_hours)
+            logger.info(
+                "Recorded %.2f CPU hours for run %s (user %s)",
+                cpu_hours,
+                updated_run.id,
+                updated_run.owner_id,
+            )
 
         # Clean up K8s job after run completes (terminal state)
         if updated_run.is_terminal() and run.job_name:

@@ -129,6 +129,7 @@ class RunService:
 
     def create_run(
         self,
+        owner_id: str,
         environment_id: str,
         program_id: str,
         credential_ids: list[str] | None = None,
@@ -136,6 +137,7 @@ class RunService:
         """Create a new run in QUEUED status.
 
         Args:
+            owner_id: ID of the user creating the run
             environment_id: ID of the environment to run in
             program_id: ID of the program being executed
             credential_ids: List of credential IDs to inject as secrets
@@ -144,6 +146,7 @@ class RunService:
             The created Run in QUEUED status
         """
         run = Run(
+            ownerId=owner_id,
             environmentId=environment_id,
             programId=program_id,
             status=RunExecutionStatus.QUEUED,
@@ -169,6 +172,7 @@ class RunService:
 
     def list_runs(
         self,
+        owner_id: str | None = None,
         environment_id: str | None = None,
         program_id: str | None = None,
         status: RunExecutionStatus | None = None,
@@ -176,6 +180,7 @@ class RunService:
         """List runs with optional filtering.
 
         Args:
+            owner_id: Filter by owner ID
             environment_id: Filter by environment ID
             program_id: Filter by program ID
             status: Filter by status
@@ -184,6 +189,9 @@ class RunService:
             List of matching runs
         """
         runs = self.run_store.list_all()
+
+        if owner_id:
+            runs = [r for r in runs if r.owner_id == owner_id]
 
         if environment_id:
             runs = [r for r in runs if r.environment_id == environment_id]

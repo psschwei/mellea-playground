@@ -21,6 +21,8 @@ from mellea_api.services.run_executor import (
     RunExecutor,
 )
 
+TEST_OWNER_ID = "test-user-123"
+
 
 @pytest.fixture
 def temp_data_dir():
@@ -105,6 +107,7 @@ class TestSubmitRun:
         """Test successful run submission."""
         # Create a run
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -137,6 +140,7 @@ class TestSubmitRun:
     ):
         """Test submitting a run with custom entrypoint."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -160,6 +164,7 @@ class TestSubmitRun:
     ):
         """Test submitting a run with non-existent environment."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id="non-existent-env",
             program_id="prog-123",
         )
@@ -181,6 +186,7 @@ class TestSubmitRun:
         )
 
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=env.id,
             program_id="prog-123",
         )
@@ -197,6 +203,7 @@ class TestSubmitRun:
     ):
         """Test handling K8s job creation failure."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -223,6 +230,7 @@ class TestSubmitRunCredentialValidation:
     ):
         """Test submitting a run with a non-existent credential raises error."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
             credential_ids=["nonexistent-cred"],
@@ -250,6 +258,7 @@ class TestSubmitRunCredentialValidation:
         )
 
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
             credential_ids=[credential.id],
@@ -276,6 +285,7 @@ class TestSubmitRunCredentialValidation:
         )
 
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
             credential_ids=[credential.id],
@@ -304,6 +314,7 @@ class TestSubmitRunCredentialValidation:
         )
 
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
             credential_ids=[credential.id],
@@ -335,6 +346,7 @@ class TestSubmitRunCredentialValidation:
         )
 
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
             credential_ids=[valid_cred.id, expired_cred.id],
@@ -358,6 +370,7 @@ class TestSyncRunStatus:
         """Test syncing status when job is running."""
         # Create and start a run
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -386,6 +399,7 @@ class TestSyncRunStatus:
         """Test syncing status when job succeeded."""
         # Create, start, and mark running
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -417,6 +431,7 @@ class TestSyncRunStatus:
         """Test syncing status when job failed."""
         # Create, start, and mark running
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -447,6 +462,7 @@ class TestSyncRunStatus:
     ):
         """Test syncing status when run has no job name (not submitted)."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -466,6 +482,7 @@ class TestSyncRunStatus:
         """Test syncing status for a terminal run (should be skipped)."""
         # Create and complete a run
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -493,6 +510,7 @@ class TestSyncRunStatus:
     ):
         """Test handling K8s error during sync."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -519,6 +537,7 @@ class TestCancelRun:
         """Test graceful cancellation (default) sends SIGTERM with grace period."""
         # Create and start a run
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -542,6 +561,7 @@ class TestCancelRun:
         """Test force cancellation immediately terminates without grace period."""
         # Create and start a run
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -564,6 +584,7 @@ class TestCancelRun:
     ):
         """Test cancelling a queued run without a K8s job."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -582,6 +603,7 @@ class TestCancelRun:
     ):
         """Test cancelling when K8s job cancellation fails (should still cancel run)."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -613,6 +635,7 @@ class TestCleanupCompletedJob:
         """Test cleaning up a completed job."""
         # Create and complete a run
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -634,6 +657,7 @@ class TestCleanupCompletedJob:
     ):
         """Test cleanup when run has no job name."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -653,6 +677,7 @@ class TestCleanupCompletedJob:
     ):
         """Test cleanup when run is not terminal."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -683,6 +708,7 @@ class TestFullLifecycle:
         """Test a complete successful run lifecycle."""
         # 1. Create run
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -728,6 +754,7 @@ class TestFullLifecycle:
         """Test a run that fails during execution."""
         # Create and submit
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -774,6 +801,7 @@ class TestFullLifecycle:
 
         # Create run with credential
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
             credential_ids=[credential.id],
@@ -797,6 +825,7 @@ class TestFullLifecycle:
         """Test a run that is cancelled during execution."""
         # Create and submit
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
@@ -827,6 +856,7 @@ class TestFullLifecycle:
     ):
         """Test a run that fails during K8s job creation."""
         run = run_service.create_run(
+            owner_id=TEST_OWNER_ID,
             environment_id=sample_environment.id,
             program_id="prog-123",
         )
