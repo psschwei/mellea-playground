@@ -1,7 +1,10 @@
 """QuotaService for enforcing user resource quotas."""
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,6 +12,9 @@ from mellea_api.core.config import Settings, get_settings
 from mellea_api.core.store import JsonStore
 from mellea_api.models.common import RunExecutionStatus
 from mellea_api.models.user import UserQuotas
+
+if TYPE_CHECKING:
+    from mellea_api.services.run import RunService
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +54,7 @@ class QuotaUsage(BaseModel):
         serialization_alias="lastUpdated",
     )
 
-    def __init__(self, **data):
+    def __init__(self, **data: Any) -> None:
         super().__init__(**data)
         # Ensure id matches user_id for JsonStore compatibility
         if not self.id and self.user_id:
@@ -161,7 +167,7 @@ class QuotaService:
             self.usage_store.create(usage)
 
     def get_concurrent_runs_count(
-        self, user_id: str, run_service: "RunService"  # noqa: F821
+        self, user_id: str, run_service: RunService,
     ) -> int:
         """Get count of currently active runs for a user.
 
@@ -184,7 +190,7 @@ class QuotaService:
         self,
         user_id: str,
         user_quotas: UserQuotas,
-        run_service: "RunService",  # noqa: F821
+        run_service: RunService,
     ) -> None:
         """Check if user can create another concurrent run.
 
@@ -261,7 +267,7 @@ class QuotaService:
         self,
         user_id: str,
         user_quotas: UserQuotas,
-        run_service: "RunService",  # noqa: F821
+        run_service: RunService,
     ) -> None:
         """Check all quotas for creating a new run.
 
@@ -326,8 +332,8 @@ class QuotaService:
         self,
         user_id: str,
         user_quotas: UserQuotas,
-        run_service: "RunService",  # noqa: F821
-    ) -> dict:
+        run_service: RunService,
+    ) -> dict[str, Any]:
         """Get current quota status for a user.
 
         Args:

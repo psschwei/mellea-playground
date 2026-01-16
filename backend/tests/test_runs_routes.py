@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+# Test constants
+TEST_OWNER_ID = "test-user-123"
+
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
@@ -17,8 +20,13 @@ def client() -> Iterator[TestClient]:
     import mellea_api.services.auth as auth_module
     import mellea_api.services.credentials as cred_module
     import mellea_api.services.environment as env_module
+    import mellea_api.services.idle_timeout as idle_timeout_module
+    import mellea_api.services.log as log_module
+    import mellea_api.services.quota as quota_module
+    import mellea_api.services.retention_policy as retention_policy_module
     import mellea_api.services.run as run_module
     import mellea_api.services.run_executor as run_executor_module
+    import mellea_api.services.warmup as warmup_module
     from mellea_api.core.config import get_settings
 
     # Use a temporary directory for data
@@ -35,6 +43,15 @@ def client() -> Iterator[TestClient]:
         env_module._environment_service = None
         run_module._run_service = None
         run_executor_module._run_executor = None
+        run_executor_module._run_executor_controller = None
+        idle_timeout_module._idle_timeout_service = None
+        idle_timeout_module._idle_timeout_controller = None
+        warmup_module._warmup_service = None
+        warmup_module._warmup_controller = None
+        retention_policy_module._retention_policy_service = None
+        retention_policy_module._retention_policy_controller = None
+        log_module._log_service = None
+        quota_module._quota_service = None
 
         # Get fresh settings and ensure directories exist
         settings = get_settings()
@@ -63,6 +80,15 @@ def client() -> Iterator[TestClient]:
             env_module._environment_service = None
             run_module._run_service = None
             run_executor_module._run_executor = None
+            run_executor_module._run_executor_controller = None
+            idle_timeout_module._idle_timeout_service = None
+            idle_timeout_module._idle_timeout_controller = None
+            warmup_module._warmup_service = None
+            warmup_module._warmup_controller = None
+            retention_policy_module._retention_policy_service = None
+            retention_policy_module._retention_policy_controller = None
+            log_module._log_service = None
+            quota_module._quota_service = None
 
 
 @pytest.fixture
