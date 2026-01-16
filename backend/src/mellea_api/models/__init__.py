@@ -39,8 +39,16 @@ from mellea_api.models.user import (
     UserRole,
     UserStatus,
 )
+from mellea_api.models.artifact import (
+    Artifact,
+    ArtifactType,
+    ArtifactUsage,
+)
 
 __all__ = [
+    "Artifact",
+    "ArtifactType",
+    "ArtifactUsage",
     "AssetMetadata",
     "AuthConfig",
     "AuthProvider",

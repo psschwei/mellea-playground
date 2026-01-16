@@ -11,11 +11,13 @@ from mellea_api.core.config import get_settings
 from mellea_api.core.telemetry import setup_telemetry
 from mellea_api.routes import (
     archive_upload_router,
+    artifacts_router,
     assets_router,
     auth_router,
     builds_router,
     controller_router,
     credentials_router,
+    environments_router,
     github_import_router,
     health_router,
     runs_router,
@@ -98,9 +100,11 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(artifacts_router)
     app.include_router(assets_router)
     app.include_router(builds_router)
     app.include_router(credentials_router)
+    app.include_router(environments_router)
     app.include_router(github_import_router)
     app.include_router(archive_upload_router)
     app.include_router(runs_router)

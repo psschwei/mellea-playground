@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     run_executor_enabled: bool = True
     run_executor_interval_seconds: int = 5  # Poll for queued runs every 5 seconds
 
+    # Artifact Collector
+    artifact_retention_days: int = 30  # Delete artifacts after 30 days by default
+    artifact_max_single_size_mb: int = 100  # Max size for a single artifact (100MB)
+    artifact_cleanup_interval_seconds: int = 3600  # Clean up expired artifacts hourly
+
     def ensure_data_dirs(self) -> None:
         """Create data directory structure if it doesn't exist."""
         subdirs = ["metadata", "workspaces", "artifacts", "runs"]
