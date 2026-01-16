@@ -171,7 +171,7 @@ class ArtifactCollectorService:
         else:
             # Create new usage record - id is set automatically from user_id
             new_usage = ArtifactUsage(
-                userId=owner_id,
+                user_id=owner_id,
                 total_bytes=max(0, delta_bytes),
                 artifact_count=max(0, delta_count),
             )
@@ -256,12 +256,12 @@ class ArtifactCollectorService:
 
         # Create artifact record
         artifact = Artifact(
-            runId=run_id,
-            ownerId=owner_id,
+            run_id=run_id,
+            owner_id=owner_id,
             name=name,
             artifact_type=artifact_type,
             size_bytes=size_bytes,
-            storagePath="",  # Will be set after we have the ID
+            storage_path="",  # Will be set after we have the ID
             mime_type=mimetypes.guess_type(name)[0],
             tags=tags or [],
             metadata=metadata or {},
@@ -333,12 +333,12 @@ class ArtifactCollectorService:
 
         # Create artifact record
         artifact = Artifact(
-            runId=run_id,
-            ownerId=owner_id,
+            run_id=run_id,
+            owner_id=owner_id,
             name=name,
             artifact_type=artifact_type,
             size_bytes=size_bytes,
-            storagePath="",
+            storage_path="",
             mime_type=mimetypes.guess_type(name)[0],
             tags=tags or [],
             metadata=metadata or {},
@@ -532,7 +532,7 @@ class ArtifactCollectorService:
         """
         usage = self.usage_store.get_by_id(user_id)
         if usage is None:
-            return ArtifactUsage(userId=user_id)
+            return ArtifactUsage(user_id=user_id)
         return usage
 
     def recalculate_user_usage(self, user_id: str) -> ArtifactUsage:
@@ -559,7 +559,7 @@ class ArtifactCollectorService:
             usage = existing
         else:
             usage = ArtifactUsage(
-                userId=user_id,
+                user_id=user_id,
                 total_bytes=total_bytes,
                 artifact_count=artifact_count,
             )
@@ -587,9 +587,8 @@ class ArtifactCollectorService:
         deleted_count = 0
 
         for artifact in artifacts:
-            if artifact.expires_at and artifact.expires_at < now:
-                if self.delete_artifact(artifact.id):
-                    deleted_count += 1
+            if artifact.expires_at and artifact.expires_at < now and self.delete_artifact(artifact.id):
+                deleted_count += 1
 
         if deleted_count > 0:
             logger.info(f"Cleaned up {deleted_count} expired artifacts")

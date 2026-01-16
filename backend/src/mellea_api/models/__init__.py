@@ -1,5 +1,10 @@
 """Pydantic models for Mellea assets and entities."""
 
+from mellea_api.models.artifact import (
+    Artifact,
+    ArtifactType,
+    ArtifactUsage,
+)
 from mellea_api.models.assets import (
     AssetMetadata,
     CompositionAsset,
@@ -38,11 +43,6 @@ from mellea_api.models.user import (
     UserQuotas,
     UserRole,
     UserStatus,
-)
-from mellea_api.models.artifact import (
-    Artifact,
-    ArtifactType,
-    ArtifactUsage,
 )
 
 __all__ = [

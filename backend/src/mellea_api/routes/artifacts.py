@@ -10,7 +10,6 @@ from mellea_api.core.deps import CurrentUser
 from mellea_api.models.artifact import Artifact, ArtifactType, ArtifactUsage
 from mellea_api.services.artifact_collector import (
     ArtifactCollectorService,
-    ArtifactNotFoundError,
     ArtifactTooLargeError,
     QuotaExceededError,
     get_artifact_collector_service,
@@ -210,11 +209,11 @@ async def download_artifact(
 
     try:
         content = artifact_service.get_artifact_content(artifact_id)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artifact file not found on disk",
-        )
+        ) from e
 
     return Response(
         content=content,
@@ -272,12 +271,12 @@ async def upload_artifact(
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=str(e),
-        )
+        ) from e
     except ArtifactTooLargeError as e:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=str(e),
-        )
+        ) from e
 
     return ArtifactResponse(artifact=artifact)
 
