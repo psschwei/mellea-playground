@@ -14,6 +14,10 @@ def client() -> Iterator[TestClient]:
     import mellea_api.services.assets as assets_module
     import mellea_api.services.auth as auth_module
     import mellea_api.services.environment as env_module
+    import mellea_api.services.environment_builder as builder_module
+    import mellea_api.services.idle_timeout as idle_module
+    import mellea_api.services.run as run_module
+    import mellea_api.services.run_executor as run_executor_module
     import mellea_api.services.warmup as warmup_module
     from mellea_api.core.config import get_settings
 
@@ -28,6 +32,12 @@ def client() -> Iterator[TestClient]:
         auth_module._auth_service = None
         assets_module._asset_service = None
         env_module._environment_service = None
+        builder_module._environment_builder_service = None
+        idle_module._idle_timeout_service = None
+        idle_module._idle_timeout_controller = None
+        run_module._run_service = None
+        run_executor_module._run_executor = None
+        run_executor_module._run_executor_controller = None
         warmup_module._warmup_service = None
         warmup_module._warmup_controller = None
 
@@ -55,6 +65,12 @@ def client() -> Iterator[TestClient]:
             auth_module._auth_service = None
             assets_module._asset_service = None
             env_module._environment_service = None
+            builder_module._environment_builder_service = None
+            idle_module._idle_timeout_service = None
+            idle_module._idle_timeout_controller = None
+            run_module._run_service = None
+            run_executor_module._run_executor = None
+            run_executor_module._run_executor_controller = None
             warmup_module._warmup_service = None
             warmup_module._warmup_controller = None
 
