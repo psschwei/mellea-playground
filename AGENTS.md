@@ -18,6 +18,18 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## Python Commands
+
+All Python commands should be run using **uv**. This ensures consistent dependency management and virtual environment handling.
+
+```bash
+# Examples
+uv run pytest                    # Run tests
+uv run python script.py          # Run a script
+uv run mypy .                    # Type checking
+uv run ruff check .              # Linting
+```
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
