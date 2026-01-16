@@ -1,7 +1,7 @@
 """Environment routes for managing environment lifecycle."""
 
 import logging
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -78,7 +78,7 @@ class WarmPoolStatusResponse(BaseModel):
     current_pool_size: int = Field(alias="currentPoolSize")
     stale_count: int = Field(alias="staleCount")
     popular_dependencies_count: int = Field(alias="popularDependenciesCount")
-    warm_environments: list[dict] = Field(alias="warmEnvironments")
+    warm_environments: list[dict[str, Any]] = Field(alias="warmEnvironments")
     thresholds: dict[str, int | float]
 
     class Config:
@@ -180,9 +180,9 @@ async def get_environment_stats(
 
     return EnvironmentStatsResponse(
         total=len(environments),
-        byStatus=by_status,
-        warmPoolSize=pool_status["current_pool_size"],
-        warmPoolTarget=pool_status["target_pool_size"],
+        by_status=by_status,
+        warm_pool_size=cast(int, pool_status["current_pool_size"]),
+        warm_pool_target=cast(int, pool_status["target_pool_size"]),
     )
 
 
@@ -199,13 +199,13 @@ async def get_warm_pool_status(
     pool_status = warmup_service.get_pool_status()
 
     return WarmPoolStatusResponse(
-        enabled=pool_status["enabled"],
-        targetPoolSize=pool_status["target_pool_size"],
-        currentPoolSize=pool_status["current_pool_size"],
-        staleCount=pool_status["stale_count"],
-        popularDependenciesCount=pool_status["popular_dependencies_count"],
-        warmEnvironments=pool_status["warm_environments"],
-        thresholds=pool_status["thresholds"],
+        enabled=cast(bool, pool_status["enabled"]),
+        target_pool_size=cast(int, pool_status["target_pool_size"]),
+        current_pool_size=cast(int, pool_status["current_pool_size"]),
+        stale_count=cast(int, pool_status["stale_count"]),
+        popular_dependencies_count=cast(int, pool_status["popular_dependencies_count"]),
+        warm_environments=cast(list[dict[str, Any]], pool_status["warm_environments"]),
+        thresholds=cast(dict[str, int | float], pool_status["thresholds"]),
     )
 
 
