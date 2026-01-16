@@ -41,6 +41,11 @@ from mellea_api.services.log import (
     get_log_service,
     reset_log_service,
 )
+from mellea_api.services.model_pricing import (
+    ModelPrice,
+    ModelPricing,
+    get_model_pricing,
+)
 from mellea_api.services.warmup import (
     WarmupController,
     WarmupService,
@@ -88,4 +93,8 @@ __all__ = [
     "get_log_service",
     "LogEntry",
     "reset_log_service",
+    # Model pricing service
+    "ModelPricing",
+    "ModelPrice",
+    "get_model_pricing",
 ]
