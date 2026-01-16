@@ -209,6 +209,9 @@ class K8sJobService:
                 run_as_non_root=True,
                 run_as_user=DEFAULT_USER_ID,
                 fs_group=DEFAULT_GROUP_ID,
+                seccomp_profile=client.V1SeccompProfile(
+                    type="RuntimeDefault",
+                ),
             ),
             containers=[container],
             volumes=volumes,

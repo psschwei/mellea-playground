@@ -116,6 +116,9 @@ class TestBuildRunJobSpec:
         assert pod_security.run_as_non_root is True
         assert pod_security.run_as_user == DEFAULT_USER_ID
         assert pod_security.fs_group == DEFAULT_USER_ID
+        # Seccomp profile enforces syscall restrictions
+        assert pod_security.seccomp_profile is not None
+        assert pod_security.seccomp_profile.type == "RuntimeDefault"
 
         # Container security context
         container = job.spec.template.spec.containers[0]

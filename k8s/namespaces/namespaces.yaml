@@ -1,5 +1,6 @@
 # Kubernetes namespaces for Mellea Playground
 # Provides isolation between different system components
+# Pod Security Standards are enforced at namespace level
 ---
 apiVersion: v1
 kind: Namespace
@@ -8,6 +9,10 @@ metadata:
   labels:
     app.kubernetes.io/part-of: mellea
     mellea.io/component: system
+    # Baseline PSS: init container requires root for permission setup
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
 apiVersion: v1
 kind: Namespace
@@ -16,6 +21,10 @@ metadata:
   labels:
     app.kubernetes.io/part-of: mellea
     mellea.io/component: builds
+    # Baseline PSS: Kaniko may require elevated permissions for image builds
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
 apiVersion: v1
 kind: Namespace
@@ -24,6 +33,10 @@ metadata:
   labels:
     app.kubernetes.io/part-of: mellea
     mellea.io/component: runs
+    # Restricted PSS: user code runs with maximum security constraints
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
 apiVersion: v1
 kind: Namespace
@@ -32,3 +45,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: mellea
     mellea.io/component: credentials
+    # Restricted PSS: highly isolated credential storage
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
