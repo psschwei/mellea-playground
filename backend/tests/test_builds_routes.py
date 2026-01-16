@@ -8,8 +8,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from mellea_api.models.build import BuildJobStatus, BuildResult
-
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
