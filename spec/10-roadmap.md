@@ -172,24 +172,47 @@ This roadmap references specific components from the detailed specifications in 
 
 **Goal**: Users can compose workflows visually with drag-and-drop.
 
-### 4.1 Canvas Foundation
+**Prerequisites**: Phases 0-3 complete, especially:
+- Run execution infrastructure (Phase 2.4)
+- Log streaming (Phase 2.5)
+- Artifact storage (Phase 2.6)
+- Permission system (Phase 3.1)
+- Sharing mechanics (Phase 3.2)
+
+**Note**: Phase 4 is split into 4a (Core) and 4b (Advanced) for iterative development.
+
+---
+
+### Phase 4a – Visual Builder Core (6-8 weeks)
+
+### 4.1 Canvas Foundation + State Management
 - [ ] Set up ReactFlow with custom theme (ref: Section 6.1)
+- [ ] Choose state management solution (Zustand recommended)
+- [ ] Define composition state schema (nodes, edges, metadata, execution state)
+- [ ] Implement undo/redo stack with history management
+- [ ] Add auto-save with debouncing (save every 5s after changes)
 - [ ] Implement canvas state management with `useNodesState`/`useEdgesState`
 - [ ] Add zoom, pan, minimap controls
 - [ ] Create selection and multi-select handling
 
-### 4.2 Node System
+### 4.2 Node System + Configuration
 - [ ] Implement `MelleaNodeData` interface (ref: Section 6.2.1)
 - [ ] Create `ProgramNode` component with slot handles
 - [ ] Create `ModelNode` component with provider badge
 - [ ] Create `PrimitiveNode` for loops, conditionals, merge
 - [ ] Build `UtilityNode` for input/output/notes
+- [ ] Create `NodeConfigPanel` component with tabbed interface
+- [ ] Implement slot mapping UI for program nodes
+- [ ] Add model parameter overrides (temperature, max_tokens, top_p)
+- [ ] Build primitive node configuration (loop ranges, conditions, merge strategies)
+- [ ] Add validation for node configurations
 
 ### 4.3 Sidebar & Palette
 - [ ] Create `BuilderSidebar` with categorized sections (ref: Section 6.3)
 - [ ] Implement drag-from-palette to canvas
 - [ ] Add asset search within sidebar
 - [ ] Build "Recently Used" section
+- [ ] Add virtualization for node list (performance)
 
 ### 4.4 Connections & Validation
 - [ ] Implement edge styling by category (ref: Section 6.4)
@@ -197,24 +220,78 @@ This roadmap references specific components from the detailed specifications in 
 - [ ] Add visual feedback for invalid connections
 - [ ] Implement auto-layout for messy graphs
 
-### 4.5 Composition Storage
-- [ ] Create `Composition` asset type
-- [ ] Implement save/load with versioning
-- [ ] Add composition metadata (name, description, tags)
-- [ ] Build composition list view
+### 4.5 Composition Storage (Moved Earlier)
+- [ ] Create `Composition` asset type with metadata schema
+- [ ] Implement save/load with versioning (git-like history)
+- [ ] Add composition metadata editor (name, description, tags)
+- [ ] Build composition list view with filters
+- [ ] Implement auto-save integration with state management
+- [ ] Add 'Save As' and 'Duplicate' features
 
-### 4.6 Code Generation
+**Phase 4a Exit Criteria**: Can build, configure, and save workflows visually with auto-save.
+
+---
+
+### Phase 4b – Execution & Advanced Features (6-8 weeks)
+
+### 4.6 Code Generation (Expanded)
 - [ ] Implement `CodeGenerator` from graph (ref: Section 6.6)
-- [ ] Create code preview panel
-- [ ] Add export to standalone Python script
+- [ ] Generate executable Python with proper imports and error handling
+- [ ] Include dependency requirements.txt generation
+- [ ] Add inline comments explaining node connections and data flow
+- [ ] Support exporting as reusable program asset (save to catalog)
+- [ ] Create code preview panel with syntax highlighting
+- [ ] Add code formatting with black/ruff
+- [ ] Create unit test scaffolding generation (optional)
 
 ### 4.7 Composition Execution
 - [ ] Implement `CompositionExecutor` service (ref: Section 6.9)
-- [ ] Add per-node status visualization during run
-- [ ] Create execution debugging with node-level logs
+- [ ] Build composition validation before execution (cycles, missing configs)
+- [ ] Implement topological sort for execution order
+- [ ] Add execution plan preview
+
+### 4.7a Execution Visualization (Expanded)
+- [ ] Implement real-time node status updates (pending/running/success/error)
+- [ ] Add progress indicators for long-running nodes
+- [ ] Create node-level log streaming in detail panel
+- [ ] Build error highlighting with stack traces
+- [ ] Implement data preview between nodes (show intermediate outputs)
+- [ ] Add execution timeline view
+- [ ] Create execution replay feature
+
+### 4.7b Error Recovery & Debugging
+- [ ] Implement checkpoint/resume for long compositions
+- [ ] Add retry logic for failed nodes with exponential backoff
+- [ ] Create 'run from here' feature for debugging (start from specific node)
+- [ ] Add breakpoint support for step-by-step execution
+- [ ] Create error recovery suggestions based on failure type
 - [ ] Implement partial re-run from failed node
 
-**Exit Criteria**: Can build workflows visually, save compositions, execute with per-node status.
+### 4.4b Collaboration Features
+- [ ] Apply asset permissions to compositions (view/edit/execute/admin)
+- [ ] Add real-time collaboration indicators (who's viewing/editing)
+- [ ] Implement composition forking/versioning
+- [ ] Create composition templates/examples library
+- [ ] Build composition sharing dialog with permission controls
+
+### 4.1b Performance Optimizations
+- [ ] Implement viewport culling for large graphs (>50 nodes)
+- [ ] Add lazy loading for node details and configurations
+- [ ] Optimize edge rendering (use simplified paths, reduce re-renders)
+- [ ] Create performance monitoring and metrics
+- [ ] Add performance budget warnings
+
+**Phase 4b Exit Criteria**: 
+- Can execute compositions with per-node status and logs
+- Can debug failed compositions with node-level logs and data preview
+- Can export compositions as standalone Python programs
+- Can share compositions with other users with permissions
+- Can handle compositions with 50+ nodes without performance degradation
+- Can recover from failures with retry/resume
+
+**Overall Phase 4 Exit Criteria**: Production-ready visual builder with full execution, debugging, and collaboration capabilities.
+
+**Estimated Timeline**: 12-16 weeks total (vs original 8-12 weeks)
 
 ---
 
