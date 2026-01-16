@@ -68,8 +68,8 @@ class EnvironmentBuilderService:
     """
 
     BASE_IMAGES = {
-        "3.11": "python:3.11-slim",
-        "3.12": "python:3.12-slim",
+        "3.11": "mellea-python:3.11",
+        "3.12": "mellea-python:3.12",
     }
     DEFAULT_PYTHON_VERSION = "3.12"
 
