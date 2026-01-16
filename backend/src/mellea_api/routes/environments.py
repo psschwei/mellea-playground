@@ -284,8 +284,8 @@ async def bulk_delete_environments(
 
     return BulkDeleteResponse(
         results=results,
-        deletedCount=deleted_count,
-        failedCount=failed_count,
+        deleted_count=deleted_count,
+        failed_count=failed_count,
     )
 
 
