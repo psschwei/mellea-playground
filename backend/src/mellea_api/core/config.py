@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     retention_policy_enabled: bool = True
     retention_policy_interval_seconds: int = 3600  # 1 hour between cleanup cycles
 
+    # LLM Metrics Collector
+    llm_metrics_retention_days: int = 90  # Delete metrics older than 90 days
+
     def ensure_data_dirs(self) -> None:
         """Create data directory structure if it doesn't exist."""
         subdirs = ["metadata", "workspaces", "artifacts", "runs"]
