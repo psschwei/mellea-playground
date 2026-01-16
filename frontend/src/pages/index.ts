@@ -7,3 +7,4 @@ export { CredentialsPage } from './Credentials';
 export { RunsPage } from './Runs';
 export { CatalogPage } from './Catalog';
 export { AssetDetailPage } from './AssetDetail';
+export { ModelsPage } from './Models';
