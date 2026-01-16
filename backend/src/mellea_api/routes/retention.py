@@ -3,7 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from mellea_api.core.deps import CurrentUser
 from mellea_api.models.retention_policy import (
@@ -93,35 +93,33 @@ class PreviewResponse(BaseModel):
 class CleanupResponse(BaseModel):
     """Response for cleanup operation."""
 
-    policies_evaluated: int = Field(alias="policiesEvaluated")
-    artifacts_deleted: int = Field(alias="artifactsDeleted")
-    runs_deleted: int = Field(alias="runsDeleted")
-    environments_cleaned: int = Field(alias="environmentsCleaned")
-    logs_deleted: int = Field(alias="logsDeleted")
-    storage_freed_bytes: int = Field(alias="storageFreedBytes")
-    errors: list[str]
-    duration_seconds: float = Field(alias="durationSeconds")
+    model_config = ConfigDict(populate_by_name=True)
 
-    class Config:
-        populate_by_name = True
+    policies_evaluated: int = Field(serialization_alias="policiesEvaluated")
+    artifacts_deleted: int = Field(serialization_alias="artifactsDeleted")
+    runs_deleted: int = Field(serialization_alias="runsDeleted")
+    environments_cleaned: int = Field(serialization_alias="environmentsCleaned")
+    logs_deleted: int = Field(serialization_alias="logsDeleted")
+    storage_freed_bytes: int = Field(serialization_alias="storageFreedBytes")
+    errors: list[str]
+    duration_seconds: float = Field(serialization_alias="durationSeconds")
 
 
 class MetricsResponse(BaseModel):
     """Response for metrics query."""
 
-    has_metrics: bool = Field(alias="hasMetrics")
-    timestamp: str | None = None
-    policies_evaluated: int = Field(default=0, alias="policiesEvaluated")
-    artifacts_deleted: int = Field(default=0, alias="artifactsDeleted")
-    runs_deleted: int = Field(default=0, alias="runsDeleted")
-    environments_cleaned: int = Field(default=0, alias="environmentsCleaned")
-    logs_deleted: int = Field(default=0, alias="logsDeleted")
-    storage_freed_bytes: int = Field(default=0, alias="storageFreedBytes")
-    errors: list[str] = Field(default_factory=list)
-    duration_seconds: float = Field(default=0.0, alias="durationSeconds")
+    model_config = ConfigDict(populate_by_name=True)
 
-    class Config:
-        populate_by_name = True
+    has_metrics: bool = Field(serialization_alias="hasMetrics")
+    timestamp: str | None = None
+    policies_evaluated: int = Field(default=0, serialization_alias="policiesEvaluated")
+    artifacts_deleted: int = Field(default=0, serialization_alias="artifactsDeleted")
+    runs_deleted: int = Field(default=0, serialization_alias="runsDeleted")
+    environments_cleaned: int = Field(default=0, serialization_alias="environmentsCleaned")
+    logs_deleted: int = Field(default=0, serialization_alias="logsDeleted")
+    storage_freed_bytes: int = Field(default=0, serialization_alias="storageFreedBytes")
+    errors: list[str] = Field(default_factory=list)
+    duration_seconds: float = Field(default=0.0, serialization_alias="durationSeconds")
 
 
 # -------------------------------------------------------------------------
