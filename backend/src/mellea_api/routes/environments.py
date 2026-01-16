@@ -180,9 +180,9 @@ async def get_environment_stats(
 
     return EnvironmentStatsResponse(
         total=len(environments),
-        by_status=by_status,
-        warm_pool_size=cast(int, pool_status["current_pool_size"]),
-        warm_pool_target=cast(int, pool_status["target_pool_size"]),
+        byStatus=by_status,
+        warmPoolSize=cast(int, pool_status["current_pool_size"]),
+        warmPoolTarget=cast(int, pool_status["target_pool_size"]),
     )
 
 
@@ -200,11 +200,11 @@ async def get_warm_pool_status(
 
     return WarmPoolStatusResponse(
         enabled=cast(bool, pool_status["enabled"]),
-        target_pool_size=cast(int, pool_status["target_pool_size"]),
-        current_pool_size=cast(int, pool_status["current_pool_size"]),
-        stale_count=cast(int, pool_status["stale_count"]),
-        popular_dependencies_count=cast(int, pool_status["popular_dependencies_count"]),
-        warm_environments=cast(list[dict[str, Any]], pool_status["warm_environments"]),
+        targetPoolSize=cast(int, pool_status["target_pool_size"]),
+        currentPoolSize=cast(int, pool_status["current_pool_size"]),
+        staleCount=cast(int, pool_status["stale_count"]),
+        popularDependenciesCount=cast(int, pool_status["popular_dependencies_count"]),
+        warmEnvironments=cast(list[dict[str, Any]], pool_status["warm_environments"]),
         thresholds=cast(dict[str, int | float], pool_status["thresholds"]),
     )
 
@@ -284,8 +284,8 @@ async def bulk_delete_environments(
 
     return BulkDeleteResponse(
         results=results,
-        deleted_count=deleted_count,
-        failed_count=failed_count,
+        deletedCount=deleted_count,
+        failedCount=failed_count,
     )
 
 
