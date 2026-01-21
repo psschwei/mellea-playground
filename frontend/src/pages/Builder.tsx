@@ -1,4 +1,3 @@
-import { useState, useCallback } from 'react';
 import {
   Box,
   Heading,
@@ -7,13 +6,22 @@ import {
   Text,
   Button,
   useColorModeValue,
+  Badge,
 } from '@chakra-ui/react';
 import { FiPlus, FiSave, FiPlay } from 'react-icons/fi';
-import { Node, Edge } from 'reactflow';
-import { Canvas, nodeColors } from '@/components/Builder';
+import { ReactFlowProvider } from 'reactflow';
+import {
+  ConnectedCanvas,
+  CompositionProvider,
+  useCompositionSelection,
+  useComposition,
+  nodeColors,
+  type MelleaNodeData,
+} from '@/components/Builder';
+import type { Node } from 'reactflow';
 
 // Demo nodes to show the canvas is working
-const initialNodes: Node[] = [
+const initialNodes: Node<MelleaNodeData>[] = [
   {
     id: 'input-1',
     type: 'default',
@@ -61,7 +69,7 @@ const initialNodes: Node[] = [
   },
 ];
 
-const initialEdges: Edge[] = [
+const initialEdges = [
   {
     id: 'e-input-program',
     source: 'input-1',
@@ -76,98 +84,151 @@ const initialEdges: Edge[] = [
   },
 ];
 
-export function BuilderPage() {
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+// Node details sidebar - uses composition context
+function NodeDetailsSidebar() {
+  const { selectedNode } = useCompositionSelection();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
-  const handleNodeSelect = useCallback((node: Node | null) => {
-    setSelectedNode(node);
-  }, []);
+  if (!selectedNode) {
+    return null;
+  }
+
+  const category = selectedNode.data?.category;
 
   return (
-    <Box h="calc(100vh - 64px)" display="flex" flexDirection="column">
-      {/* Header toolbar */}
-      <HStack
-        px={4}
-        py={2}
-        borderBottom="1px"
-        borderColor={borderColor}
-        bg={bgColor}
-        justify="space-between"
-      >
-        <HStack spacing={4}>
-          <Heading size="md">Visual Builder</Heading>
-          <Text color="gray.500" fontSize="sm">
-            Untitled Composition
-          </Text>
-        </HStack>
-        <HStack spacing={2}>
-          <Button leftIcon={<FiPlus />} size="sm" variant="outline">
-            Add Node
-          </Button>
-          <Button leftIcon={<FiSave />} size="sm" variant="outline">
-            Save
-          </Button>
-          <Button leftIcon={<FiPlay />} size="sm" colorScheme="brand">
-            Run
-          </Button>
-        </HStack>
-      </HStack>
-
-      {/* Main content area */}
-      <Box flex="1" display="flex" overflow="hidden">
-        {/* Canvas area */}
-        <Box flex="1" bg="gray.50">
-          <Canvas
-            initialNodes={initialNodes}
-            initialEdges={initialEdges}
-            onNodeSelect={handleNodeSelect}
-          />
-        </Box>
-
-        {/* Right sidebar for node details (when a node is selected) */}
-        {selectedNode && (
-          <VStack
-            w="300px"
-            p={4}
-            borderLeft="1px"
-            borderColor={borderColor}
-            bg={bgColor}
-            align="stretch"
-            spacing={4}
+    <VStack
+      w="300px"
+      p={4}
+      borderLeft="1px"
+      borderColor={borderColor}
+      bg={bgColor}
+      align="stretch"
+      spacing={4}
+    >
+      <Heading size="sm">Node Details</Heading>
+      <Box>
+        <Text fontSize="sm" fontWeight="medium" color="gray.500">
+          ID
+        </Text>
+        <Text fontSize="sm">{selectedNode.id}</Text>
+      </Box>
+      <Box>
+        <Text fontSize="sm" fontWeight="medium" color="gray.500">
+          Label
+        </Text>
+        <Text fontSize="sm">{selectedNode.data?.label || 'Unnamed'}</Text>
+      </Box>
+      <Box>
+        <Text fontSize="sm" fontWeight="medium" color="gray.500">
+          Category
+        </Text>
+        {category && (
+          <Badge
+            colorScheme={
+              category === 'program'
+                ? 'purple'
+                : category === 'model'
+                  ? 'pink'
+                  : category === 'primitive'
+                    ? 'blue'
+                    : 'green'
+            }
           >
-            <Heading size="sm">Node Details</Heading>
-            <Box>
-              <Text fontSize="sm" fontWeight="medium" color="gray.500">
-                ID
-              </Text>
-              <Text fontSize="sm">{selectedNode.id}</Text>
-            </Box>
-            <Box>
-              <Text fontSize="sm" fontWeight="medium" color="gray.500">
-                Label
-              </Text>
-              <Text fontSize="sm">{selectedNode.data?.label || 'Unnamed'}</Text>
-            </Box>
-            <Box>
-              <Text fontSize="sm" fontWeight="medium" color="gray.500">
-                Category
-              </Text>
-              <Text fontSize="sm">{selectedNode.data?.category || 'None'}</Text>
-            </Box>
-            <Box>
-              <Text fontSize="sm" fontWeight="medium" color="gray.500">
-                Position
-              </Text>
-              <Text fontSize="sm">
-                x: {Math.round(selectedNode.position.x)}, y:{' '}
-                {Math.round(selectedNode.position.y)}
-              </Text>
-            </Box>
-          </VStack>
+            {category}
+          </Badge>
         )}
       </Box>
+      <Box>
+        <Text fontSize="sm" fontWeight="medium" color="gray.500">
+          Position
+        </Text>
+        <Text fontSize="sm">
+          x: {Math.round(selectedNode.position.x)}, y:{' '}
+          {Math.round(selectedNode.position.y)}
+        </Text>
+      </Box>
+    </VStack>
+  );
+}
+
+// Header toolbar - uses composition context for dirty state
+function BuilderHeader() {
+  const { isDirty, getSerializableState, markClean } = useComposition();
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
+
+  const handleSave = () => {
+    const state = getSerializableState();
+    console.log('Saving composition:', state);
+    // TODO: Actually save to backend
+    markClean();
+  };
+
+  return (
+    <HStack
+      px={4}
+      py={2}
+      borderBottom="1px"
+      borderColor={borderColor}
+      bg={bgColor}
+      justify="space-between"
+    >
+      <HStack spacing={4}>
+        <Heading size="md">Visual Builder</Heading>
+        <Text color="gray.500" fontSize="sm">
+          Untitled Composition
+          {isDirty && (
+            <Text as="span" color="orange.500" ml={1}>
+              (unsaved)
+            </Text>
+          )}
+        </Text>
+      </HStack>
+      <HStack spacing={2}>
+        <Button leftIcon={<FiPlus />} size="sm" variant="outline">
+          Add Node
+        </Button>
+        <Button
+          leftIcon={<FiSave />}
+          size="sm"
+          variant="outline"
+          onClick={handleSave}
+        >
+          Save
+        </Button>
+        <Button leftIcon={<FiPlay />} size="sm" colorScheme="brand">
+          Run
+        </Button>
+      </HStack>
+    </HStack>
+  );
+}
+
+// Main builder content
+function BuilderContent() {
+  return (
+    <Box h="calc(100vh - 64px)" display="flex" flexDirection="column">
+      <BuilderHeader />
+      <Box flex="1" display="flex" overflow="hidden">
+        <Box flex="1" bg="gray.50">
+          <ConnectedCanvas />
+        </Box>
+        <NodeDetailsSidebar />
+      </Box>
     </Box>
+  );
+}
+
+export function BuilderPage() {
+  return (
+    <ReactFlowProvider>
+      <CompositionProvider
+        initialNodes={initialNodes}
+        initialEdges={initialEdges}
+      >
+        <BuilderContent />
+      </CompositionProvider>
+    </ReactFlowProvider>
   );
 }

@@ -14,6 +14,9 @@ import ReactFlow, {
   EdgeTypes,
   ConnectionMode,
   SelectionMode,
+  OnNodesChange,
+  OnEdgesChange,
+  Viewport,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Box } from '@chakra-ui/react';
@@ -26,13 +29,23 @@ import {
 
 // Props for the Canvas component
 interface CanvasProps {
+  // Standalone mode props (when not using CompositionContext)
   initialNodes?: Node[];
   initialEdges?: Edge[];
+
+  // Connected mode props (when using CompositionContext)
+  nodes?: Node[];
+  edges?: Edge[];
+  onNodesChange?: OnNodesChange;
+  onEdgesChange?: OnEdgesChange;
+  onConnect?: (connection: Connection) => void;
+
+  // Shared props
   nodeTypes?: NodeTypes;
   edgeTypes?: EdgeTypes;
-  onNodesChange?: (nodes: Node[]) => void;
-  onEdgesChange?: (edges: Edge[]) => void;
   onNodeSelect?: (node: Node | null) => void;
+  onSelectionChange?: (params: { nodes: Node[]; edges: Edge[] }) => void;
+  onViewportChange?: (viewport: Viewport) => void;
   readOnly?: boolean;
 }
 
@@ -45,65 +58,87 @@ const defaultEdgeOptions = {
   animated: false,
 };
 
+/**
+ * Canvas component for the Visual Builder
+ *
+ * Can operate in two modes:
+ * 1. Standalone mode: Pass initialNodes/initialEdges, manages its own state
+ * 2. Connected mode: Pass nodes/edges/onNodesChange/onEdgesChange from CompositionContext
+ */
 export function Canvas({
+  // Standalone mode
   initialNodes = [],
   initialEdges = [],
+  // Connected mode
+  nodes: externalNodes,
+  edges: externalEdges,
+  onNodesChange: externalOnNodesChange,
+  onEdgesChange: externalOnEdgesChange,
+  onConnect: externalOnConnect,
+  // Shared
   nodeTypes,
   edgeTypes,
-  onNodesChange: onNodesChangeCallback,
-  onEdgesChange: onEdgesChangeCallback,
   onNodeSelect,
+  onSelectionChange: externalOnSelectionChange,
+  onViewportChange,
   readOnly = false,
 }: CanvasProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  // Determine if we're in connected mode (external state management)
+  const isConnected = externalNodes !== undefined && externalEdges !== undefined;
+
+  // Internal state for standalone mode
+  const [internalNodes, _setInternalNodes, internalOnNodesChange] =
+    useNodesState(initialNodes);
+  const [internalEdges, setInternalEdges, internalOnEdgesChange] =
+    useEdgesState(initialEdges);
+
+  // Use external or internal state
+  const nodes = isConnected ? externalNodes : internalNodes;
+  const edges = isConnected ? externalEdges : internalEdges;
+  const onNodesChange = isConnected
+    ? externalOnNodesChange!
+    : internalOnNodesChange;
+  const onEdgesChange = isConnected
+    ? externalOnEdgesChange!
+    : internalOnEdgesChange;
 
   // Handle new connections
   const onConnect = useCallback(
     (connection: Connection) => {
       if (readOnly) return;
-      setEdges((eds) => addEdge(connection, eds));
-    },
-    [readOnly, setEdges]
-  );
-
-  // Notify parent of node changes
-  const handleNodesChange = useCallback(
-    (changes: Parameters<typeof onNodesChange>[0]) => {
-      onNodesChange(changes);
-      if (onNodesChangeCallback) {
-        // Get updated nodes after changes are applied
-        setNodes((currentNodes) => {
-          onNodesChangeCallback(currentNodes);
-          return currentNodes;
-        });
+      if (isConnected && externalOnConnect) {
+        externalOnConnect(connection);
+      } else {
+        setInternalEdges((eds) => addEdge(connection, eds));
       }
     },
-    [onNodesChange, onNodesChangeCallback, setNodes]
+    [readOnly, isConnected, externalOnConnect, setInternalEdges]
   );
 
-  // Notify parent of edge changes
-  const handleEdgesChange = useCallback(
-    (changes: Parameters<typeof onEdgesChange>[0]) => {
-      onEdgesChange(changes);
-      if (onEdgesChangeCallback) {
-        setEdges((currentEdges) => {
-          onEdgesChangeCallback(currentEdges);
-          return currentEdges;
-        });
-      }
-    },
-    [onEdgesChange, onEdgesChangeCallback, setEdges]
-  );
-
-  // Handle node selection
+  // Handle selection changes
   const onSelectionChange = useCallback(
-    ({ nodes: selectedNodes }: { nodes: Node[]; edges: Edge[] }) => {
+    ({ nodes: selectedNodes, edges: selectedEdges }: { nodes: Node[]; edges: Edge[] }) => {
+      // Notify parent of full selection
+      if (externalOnSelectionChange) {
+        externalOnSelectionChange({ nodes: selectedNodes, edges: selectedEdges });
+      }
+
+      // Legacy single-node selection callback
       if (onNodeSelect) {
         onNodeSelect(selectedNodes.length === 1 ? selectedNodes[0] : null);
       }
     },
-    [onNodeSelect]
+    [onNodeSelect, externalOnSelectionChange]
+  );
+
+  // Handle viewport changes
+  const handleMoveEnd = useCallback(
+    (_event: unknown, viewport: Viewport) => {
+      if (onViewportChange) {
+        onViewportChange(viewport);
+      }
+    },
+    [onViewportChange]
   );
 
   // Minimap node color function
@@ -130,10 +165,11 @@ export function Canvas({
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={handleNodesChange}
-        onEdgesChange={handleEdgesChange}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onSelectionChange={onSelectionChange}
+        onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
@@ -178,3 +214,9 @@ export function Canvas({
     </Box>
   );
 }
+
+/**
+ * ConnectedCanvas - Canvas that automatically connects to CompositionContext
+ * Use this when the Canvas should be managed by a CompositionProvider
+ */
+export { ConnectedCanvas } from './ConnectedCanvas';
