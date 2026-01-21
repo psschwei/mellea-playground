@@ -1,13 +1,26 @@
 """FastAPI dependencies for authentication and authorization."""
 
-from typing import Annotated
+from collections.abc import Callable, Coroutine
+from typing import Annotated, Any
 
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from mellea_api.core.security import decode_access_token
+from mellea_api.models.assets import (
+    CompositionAsset,
+    ModelAsset,
+    ProgramAsset,
+)
+from mellea_api.models.common import Permission
+from mellea_api.models.permission import ResourceType
 from mellea_api.models.user import User, UserRole
 from mellea_api.services.auth import get_auth_service
+from mellea_api.services.permission import (
+    PermissionDeniedError,
+    PermissionService,
+    get_permission_service,
+)
 
 # HTTP Bearer token security scheme
 security = HTTPBearer(auto_error=False)
@@ -107,7 +120,9 @@ async def get_current_user_optional(
     return user
 
 
-def require_role(minimum_role: UserRole):
+def require_role(
+    minimum_role: UserRole,
+) -> Callable[..., Coroutine[Any, Any, User]]:
     """Create a dependency that requires a minimum role level.
 
     Role hierarchy: end_user < developer < admin
@@ -218,9 +233,106 @@ async def get_current_user_sse(
     return user
 
 
+def require_permission(
+    resource_type: ResourceType,
+    required: Permission,
+    resource_id_param: str = "id",
+) -> Callable[..., Coroutine[Any, Any, User]]:
+    """Create a dependency that requires a specific permission on a resource.
+
+    This decorator factory creates a FastAPI dependency that checks whether
+    the current user has the required permission on the specified resource.
+
+    Args:
+        resource_type: Type of resource being accessed (PROGRAM, MODEL, COMPOSITION)
+        required: Permission level required (VIEW, RUN, EDIT)
+        resource_id_param: Name of the path parameter containing the resource ID
+            (default: "id")
+
+    Returns:
+        A FastAPI dependency function that performs the permission check
+
+    Example:
+        @router.get("/programs/{id}")
+        async def get_program(
+            id: str,
+            current_user: Annotated[User, Depends(require_permission(
+                ResourceType.PROGRAM,
+                Permission.VIEW,
+            ))],
+        ):
+            ...
+
+        @router.put("/models/{model_id}")
+        async def update_model(
+            model_id: str,
+            current_user: Annotated[User, Depends(require_permission(
+                ResourceType.MODEL,
+                Permission.EDIT,
+                resource_id_param="model_id",
+            ))],
+        ):
+            ...
+    """
+    from mellea_api.services.assets import get_asset_service
+
+    async def permission_checker(
+        request: Request,
+        current_user: Annotated[User, Depends(get_current_user)],
+    ) -> User:
+        # Get resource ID from path parameters
+        resource_id = request.path_params.get(resource_id_param)
+        if not resource_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Missing resource ID parameter: {resource_id_param}",
+            )
+
+        # Get the asset to check permissions
+        asset_service = get_asset_service()
+        permission_service = get_permission_service()
+
+        # Load asset metadata based on resource type
+        asset: ProgramAsset | ModelAsset | CompositionAsset | None = None
+        if resource_type == ResourceType.PROGRAM:
+            asset = asset_service.get_program(resource_id)
+        elif resource_type == ResourceType.MODEL:
+            asset = asset_service.get_model(resource_id)
+        elif resource_type == ResourceType.COMPOSITION:
+            asset = asset_service.get_composition(resource_id)
+
+        if asset is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"{resource_type.value.capitalize()} not found",
+            )
+
+        # Check permission
+        try:
+            permission_service.require_permission(
+                user=current_user,
+                resource_id=resource_id,
+                resource_type=resource_type,
+                required=required,
+                asset=asset.meta if hasattr(asset, "meta") else asset,
+            )
+        except PermissionDeniedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e),
+            ) from e
+
+        return current_user
+
+    return permission_checker
+
+
 # Type aliases for common dependencies
 CurrentUser = Annotated[User, Depends(get_current_user)]
 CurrentUserSSE = Annotated[User, Depends(get_current_user_sse)]
 OptionalUser = Annotated[User | None, Depends(get_current_user_optional)]
 AdminUser = Annotated[User, Depends(require_role(UserRole.ADMIN))]
 DeveloperUser = Annotated[User, Depends(require_role(UserRole.DEVELOPER))]
+
+# Service dependencies
+PermissionServiceDep = Annotated[PermissionService, Depends(get_permission_service)]

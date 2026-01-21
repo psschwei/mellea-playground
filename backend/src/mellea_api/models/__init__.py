@@ -25,13 +25,21 @@ from mellea_api.models.build import (
     LayerCacheEntry,
 )
 from mellea_api.models.common import (
+    AccessType,
     EnvironmentStatus,
     ModelProvider,
     ModelScope,
+    Permission,
     RunStatus,
     SharingMode,
 )
 from mellea_api.models.environment import Environment, ResourceLimits
+from mellea_api.models.permission import (
+    AccessControlEntry,
+    PermissionCheck,
+    ResourceType,
+    permission_includes,
+)
 from mellea_api.models.user import (
     AuthConfig,
     AuthProvider,
@@ -46,6 +54,8 @@ from mellea_api.models.user import (
 )
 
 __all__ = [
+    "AccessControlEntry",
+    "AccessType",
     "Artifact",
     "ArtifactType",
     "ArtifactUsage",
@@ -65,9 +75,13 @@ __all__ = [
     "ModelProvider",
     "ModelScope",
     "PackageRef",
+    "Permission",
+    "PermissionCheck",
+    "permission_includes",
     "ProgramAsset",
     "ResourceLimits",
     "ResourceProfile",
+    "ResourceType",
     "RunStatus",
     "SharedAccess",
     "SharingMode",

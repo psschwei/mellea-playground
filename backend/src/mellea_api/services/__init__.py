@@ -46,6 +46,12 @@ from mellea_api.services.model_pricing import (
     ModelPricing,
     get_model_pricing,
 )
+from mellea_api.services.permission import (
+    PermissionDeniedError,
+    PermissionService,
+    ResourceNotFoundError,
+    get_permission_service,
+)
 from mellea_api.services.warmup import (
     WarmupController,
     WarmupService,
@@ -97,4 +103,9 @@ __all__ = [
     "ModelPricing",
     "ModelPrice",
     "get_model_pricing",
+    # Permission service
+    "PermissionService",
+    "get_permission_service",
+    "PermissionDeniedError",
+    "ResourceNotFoundError",
 ]
