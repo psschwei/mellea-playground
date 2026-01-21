@@ -208,6 +208,9 @@ function modelToSidebarItem(asset: ModelAsset): SidebarItem {
   };
 }
 
+/** Data format for drag-and-drop from sidebar */
+export const SIDEBAR_DRAG_TYPE = 'application/mellea-sidebar-item';
+
 interface SidebarItemProps {
   item: SidebarItem;
   onClick: (item: SidebarItem) => void;
@@ -216,7 +219,23 @@ interface SidebarItemProps {
 function SidebarItemComponent({ item, onClick }: SidebarItemProps) {
   const bgColor = useColorModeValue('white', 'gray.700');
   const hoverBgColor = useColorModeValue('gray.50', 'gray.600');
+  const dragBgColor = useColorModeValue('gray.100', 'gray.500');
   const borderColor = nodeColors[item.category];
+
+  const handleDragStart = (event: React.DragEvent<HTMLDivElement>) => {
+    // Store item data for drop handler (excluding non-serializable icon)
+    const dragData = {
+      id: item.id,
+      type: item.type,
+      label: item.label,
+      description: item.description,
+      category: item.category,
+      assetId: item.assetId,
+      defaultData: item.defaultData,
+    };
+    event.dataTransfer.setData(SIDEBAR_DRAG_TYPE, JSON.stringify(dragData));
+    event.dataTransfer.effectAllowed = 'copy';
+  };
 
   return (
     <Tooltip label={item.description} placement="right" hasArrow>
@@ -226,8 +245,11 @@ function SidebarItemComponent({ item, onClick }: SidebarItemProps) {
         borderRadius="md"
         borderLeft="3px solid"
         borderColor={borderColor}
-        cursor="pointer"
+        cursor="grab"
+        draggable
+        onDragStart={handleDragStart}
         _hover={{ bg: hoverBgColor }}
+        _active={{ cursor: 'grabbing', bg: dragBgColor }}
         onClick={() => onClick(item)}
         transition="background 0.15s"
       >

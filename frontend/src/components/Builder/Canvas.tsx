@@ -6,6 +6,7 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   addEdge,
+  useReactFlow,
   Connection,
   Node,
   Edge,
@@ -18,6 +19,7 @@ import ReactFlow, {
   OnEdgesChange,
   Viewport,
   OnConnectStartParams,
+  ReactFlowProvider,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Box } from '@chakra-ui/react';
@@ -31,6 +33,18 @@ import { validateConnection } from './utils';
 import { ValidationConnectionLine } from './edges';
 import { useConnectionFeedback } from './ConnectionFeedback';
 import type { MelleaNodeData } from './CompositionContext';
+import { SIDEBAR_DRAG_TYPE } from './BuilderSidebar';
+
+/** Data format for items dropped from sidebar */
+export interface SidebarDropData {
+  id: string;
+  type: string;
+  label: string;
+  description: string;
+  category: string;
+  assetId?: string;
+  defaultData?: Record<string, unknown>;
+}
 
 // Props for the Canvas component
 interface CanvasProps {
@@ -59,6 +73,9 @@ interface CanvasProps {
 
   // Connection feedback (optional - uses ConnectionFeedback context if available)
   useConnectionFeedbackContext?: boolean;
+
+  // Drag and drop from sidebar
+  onDropFromSidebar?: (data: SidebarDropData, position: { x: number; y: number }) => void;
 }
 
 // Default edge styling
@@ -71,13 +88,9 @@ const defaultEdgeOptions = {
 };
 
 /**
- * Canvas component for the Visual Builder
- *
- * Can operate in two modes:
- * 1. Standalone mode: Pass initialNodes/initialEdges, manages its own state
- * 2. Connected mode: Pass nodes/edges/onNodesChange/onEdgesChange from CompositionContext
+ * Inner canvas component that has access to ReactFlow context
  */
-export function Canvas({
+function CanvasInner({
   // Standalone mode
   initialNodes = [],
   initialEdges = [],
@@ -99,8 +112,11 @@ export function Canvas({
   onClearSelection,
   // Connection feedback
   useConnectionFeedbackContext = true,
+  // Drag and drop
+  onDropFromSidebar,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const reactFlowInstance = useReactFlow();
   // Determine if we're in connected mode (external state management)
   const isConnected = externalNodes !== undefined && externalEdges !== undefined;
 
@@ -246,6 +262,39 @@ export function Canvas({
     }
   }, [onSelectAll, onClearSelection]);
 
+  // Handle drag over to allow drop
+  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  // Handle drop from sidebar
+  const handleDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+
+      if (readOnly || !onDropFromSidebar) return;
+
+      const dataStr = event.dataTransfer.getData(SIDEBAR_DRAG_TYPE);
+      if (!dataStr) return;
+
+      try {
+        const dropData: SidebarDropData = JSON.parse(dataStr);
+
+        // Convert screen coordinates to flow coordinates
+        const position = reactFlowInstance.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
+
+        onDropFromSidebar(dropData, position);
+      } catch (error) {
+        console.error('Failed to parse drop data:', error);
+      }
+    },
+    [readOnly, onDropFromSidebar, reactFlowInstance]
+  );
+
   return (
     <Box
       ref={containerRef}
@@ -254,6 +303,8 @@ export function Canvas({
       position="relative"
       tabIndex={0}
       outline="none"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       sx={{
         '& .react-flow': {
           fontFamily: 'Inter, system-ui, sans-serif',
@@ -316,6 +367,23 @@ export function Canvas({
         />
       </ReactFlow>
     </Box>
+  );
+}
+
+/**
+ * Canvas component for the Visual Builder
+ *
+ * Can operate in two modes:
+ * 1. Standalone mode: Pass initialNodes/initialEdges, manages its own state
+ * 2. Connected mode: Pass nodes/edges/onNodesChange/onEdgesChange from CompositionContext
+ *
+ * Wraps CanvasInner with ReactFlowProvider to enable useReactFlow hook.
+ */
+export function Canvas(props: CanvasProps) {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner {...props} />
+    </ReactFlowProvider>
   );
 }
 
