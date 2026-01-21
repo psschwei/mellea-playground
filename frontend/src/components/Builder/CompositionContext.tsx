@@ -32,6 +32,7 @@ import {
 } from 'reactflow';
 import { type NodeCategory, type NodeExecutionState } from './theme';
 import { defaultEdgeType, type CategoryEdgeData } from './edges';
+import { validateConnection, type ValidationResult } from './utils';
 
 // ============================================================================
 // Supporting Types (spec 6.2.1)
@@ -159,6 +160,9 @@ interface CompositionState {
 
   // Metadata
   isDirty: boolean; // Has unsaved changes
+
+  // Validation
+  lastValidationError: ValidationResult | null;
 }
 
 // Actions available on the composition
@@ -198,6 +202,9 @@ interface CompositionActions {
   markClean: () => void;
   getSerializableState: () => SerializableComposition;
   loadState: (state: SerializableComposition) => void;
+
+  // Validation
+  clearValidationError: () => void;
 }
 
 // Serializable format for persistence
@@ -259,6 +266,9 @@ export function CompositionProvider({
   // Dirty flag for unsaved changes
   const [isDirty, setIsDirty] = useState(false);
 
+  // Validation error state
+  const [lastValidationError, setLastValidationError] = useState<ValidationResult | null>(null);
+
   // Compute selected node from selection
   const selectedNode = useMemo(() => {
     if (selection.nodes.length === 1) {
@@ -284,9 +294,21 @@ export function CompositionProvider({
     [onEdgesChange]
   );
 
-  // Connection handler - adds edge with category styling
+  // Connection handler - validates and adds edge with category styling
   const onConnect = useCallback(
     (connection: Connection) => {
+      // Validate the connection before creating it
+      const validation = validateConnection(connection, nodes, edges);
+      if (!validation.valid) {
+        setLastValidationError(validation);
+        // Auto-clear error after 3 seconds
+        setTimeout(() => setLastValidationError(null), 3000);
+        return;
+      }
+
+      // Clear any previous error
+      setLastValidationError(null);
+
       // Find source node to get its category for edge styling
       const sourceNode = nodes.find((n) => n.id === connection.source);
       const sourceCategory = sourceNode?.data?.category;
@@ -308,7 +330,7 @@ export function CompositionProvider({
       );
       setIsDirty(true);
     },
-    [setEdges, nodes]
+    [setEdges, nodes, edges]
   );
 
   // Node operations
@@ -529,6 +551,11 @@ export function CompositionProvider({
     };
   }, [nodes, edges, viewport]);
 
+  // Clear validation error
+  const clearValidationError = useCallback(() => {
+    setLastValidationError(null);
+  }, []);
+
   const loadState = useCallback(
     (state: SerializableComposition) => {
       setNodes(
@@ -584,6 +611,7 @@ export function CompositionProvider({
       selectedNode,
       viewport,
       isDirty,
+      lastValidationError,
 
       // Node operations
       addNode: handleAddNode,
@@ -620,6 +648,9 @@ export function CompositionProvider({
       markClean,
       getSerializableState,
       loadState,
+
+      // Validation
+      clearValidationError,
     }),
     [
       nodes,
@@ -628,6 +659,7 @@ export function CompositionProvider({
       selectedNode,
       viewport,
       isDirty,
+      lastValidationError,
       handleAddNode,
       handleUpdateNode,
       handleRemoveNode,
@@ -648,6 +680,7 @@ export function CompositionProvider({
       markClean,
       getSerializableState,
       loadState,
+      clearValidationError,
     ]
   );
 
@@ -719,4 +752,12 @@ export function useCompositionExecution() {
   const { nodes, setNodeExecutionState, resetExecutionStates } =
     useComposition();
   return { nodes, setNodeExecutionState, resetExecutionStates };
+}
+
+/**
+ * Hook to access validation state
+ */
+export function useCompositionValidation() {
+  const { lastValidationError, clearValidationError } = useComposition();
+  return { lastValidationError, clearValidationError };
 }

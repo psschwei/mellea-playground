@@ -7,6 +7,7 @@ export {
   useCompositionNodes,
   useCompositionEdges,
   useCompositionExecution,
+  useCompositionValidation,
   type MelleaNodeData,
   type SerializableComposition,
   type SlotSignature,
@@ -14,6 +15,15 @@ export {
   type SamplingConfig,
   type ArtifactRef,
 } from './CompositionContext';
+export {
+  ConnectionValidator,
+  createConnectionValidator,
+  validateConnection,
+  type PortDataType,
+  type PortDefinition,
+  type ValidationResult,
+  type ValidationErrorCode,
+} from './utils';
 export {
   nodeColors,
   executionStateStyles,

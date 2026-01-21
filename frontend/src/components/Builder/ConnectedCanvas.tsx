@@ -6,8 +6,9 @@
  */
 import { useCallback } from 'react';
 import { Node, Edge, NodeTypes, EdgeTypes } from 'reactflow';
+import { Box, Alert, AlertIcon, AlertDescription, CloseButton } from '@chakra-ui/react';
 import { Canvas } from './Canvas';
-import { useComposition } from './CompositionContext';
+import { useComposition, useCompositionValidation } from './CompositionContext';
 
 interface ConnectedCanvasProps {
   nodeTypes?: NodeTypes;
@@ -32,6 +33,8 @@ export function ConnectedCanvas({
     clearSelection,
   } = useComposition();
 
+  const { lastValidationError, clearValidationError } = useCompositionValidation();
+
   // Handle selection changes and update context
   const handleSelectionChange = useCallback(
     ({ nodes: selectedNodes, edges: selectedEdges }: { nodes: Node[]; edges: Edge[] }) => {
@@ -44,19 +47,48 @@ export function ConnectedCanvas({
   );
 
   return (
-    <Canvas
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      onSelectionChange={handleSelectionChange}
-      onViewportChange={setViewport}
-      nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      readOnly={readOnly}
-      onSelectAll={selectAll}
-      onClearSelection={clearSelection}
-    />
+    <Box position="relative" h="100%" w="100%">
+      <Canvas
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onSelectionChange={handleSelectionChange}
+        onViewportChange={setViewport}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        readOnly={readOnly}
+        onSelectAll={selectAll}
+        onClearSelection={clearSelection}
+      />
+
+      {/* Validation error toast */}
+      {lastValidationError && !lastValidationError.valid && (
+        <Alert
+          status="error"
+          position="absolute"
+          bottom={4}
+          left="50%"
+          transform="translateX(-50%)"
+          maxW="400px"
+          borderRadius="md"
+          boxShadow="lg"
+          zIndex={1000}
+        >
+          <AlertIcon />
+          <AlertDescription fontSize="sm">
+            {lastValidationError.error}
+          </AlertDescription>
+          <CloseButton
+            position="absolute"
+            right={1}
+            top={1}
+            size="sm"
+            onClick={clearValidationError}
+          />
+        </Alert>
+      )}
+    </Box>
   );
 }
