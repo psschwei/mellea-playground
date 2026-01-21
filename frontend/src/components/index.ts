@@ -4,3 +4,4 @@ export { CreateModelModal } from './Models';
 export { ProgramCard, CreateProgramModal, CodeViewer } from './Programs';
 export { RunStatusBadge, RunPanel } from './Runs';
 export { AssetCard } from './Catalog';
+export { Canvas, nodeColors, executionStateStyles, getEdgeColor } from './Builder';
