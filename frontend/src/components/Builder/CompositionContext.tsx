@@ -87,6 +87,9 @@ interface CompositionActions {
   setSelection: (selection: SelectionState) => void;
   selectNode: (nodeId: string | null) => void;
   clearSelection: () => void;
+  selectAll: () => void;
+  removeSelectedNodes: () => void;
+  duplicateSelectedNodes: () => void;
 
   // Viewport
   setViewport: (viewport: Viewport) => void;
@@ -265,6 +268,84 @@ export function CompositionProvider({
     setSelection({ nodes: [], edges: [] });
   }, []);
 
+  // Select all nodes and edges
+  const selectAll = useCallback(() => {
+    setSelection({
+      nodes: nodes.map((n) => n.id),
+      edges: edges.map((e) => e.id),
+    });
+  }, [nodes, edges]);
+
+  // Remove all selected nodes (and their connected edges)
+  const removeSelectedNodes = useCallback(() => {
+    if (selection.nodes.length === 0 && selection.edges.length === 0) return;
+
+    // Remove selected nodes
+    setNodes((nds) => nds.filter((n) => !selection.nodes.includes(n.id)));
+
+    // Remove edges connected to selected nodes AND selected edges
+    setEdges((eds) =>
+      eds.filter(
+        (e) =>
+          !selection.edges.includes(e.id) &&
+          !selection.nodes.includes(e.source) &&
+          !selection.nodes.includes(e.target)
+      )
+    );
+
+    clearSelection();
+    setIsDirty(true);
+  }, [selection, setNodes, setEdges, clearSelection]);
+
+  // Duplicate selected nodes
+  const duplicateSelectedNodes = useCallback(() => {
+    if (selection.nodes.length === 0) return;
+
+    const selectedNodesData = nodes.filter((n) => selection.nodes.includes(n.id));
+    const idMap = new Map<string, string>();
+
+    // Create duplicated nodes with offset position
+    const newNodes = selectedNodesData.map((node) => {
+      const newId = `${node.id}-copy-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      idMap.set(node.id, newId);
+      return {
+        ...node,
+        id: newId,
+        position: {
+          x: node.position.x + 50,
+          y: node.position.y + 50,
+        },
+        selected: true,
+      };
+    });
+
+    // Duplicate edges between selected nodes
+    const selectedEdges = edges.filter(
+      (e) => selection.nodes.includes(e.source) && selection.nodes.includes(e.target)
+    );
+    const newEdges = selectedEdges.map((edge) => ({
+      ...edge,
+      id: `${edge.id}-copy-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      source: idMap.get(edge.source) || edge.source,
+      target: idMap.get(edge.target) || edge.target,
+    }));
+
+    // Add new nodes and edges
+    setNodes((nds) => [
+      ...nds.map((n) => ({ ...n, selected: false })),
+      ...newNodes,
+    ]);
+    setEdges((eds) => [...eds, ...newEdges]);
+
+    // Select the new nodes
+    setSelection({
+      nodes: newNodes.map((n) => n.id),
+      edges: newEdges.map((e) => e.id),
+    });
+
+    setIsDirty(true);
+  }, [selection, nodes, edges, setNodes, setEdges]);
+
   // Execution state operations
   const setNodeExecutionState = useCallback(
     (nodeId: string, state: NodeExecutionState) => {
@@ -386,6 +467,9 @@ export function CompositionProvider({
       setSelection,
       selectNode,
       clearSelection,
+      selectAll,
+      removeSelectedNodes,
+      duplicateSelectedNodes,
 
       // Viewport
       setViewport,
@@ -418,6 +502,9 @@ export function CompositionProvider({
       onConnect,
       selectNode,
       clearSelection,
+      selectAll,
+      removeSelectedNodes,
+      duplicateSelectedNodes,
       setNodeExecutionState,
       resetExecutionStates,
       markClean,
@@ -449,9 +536,26 @@ export function useComposition(): CompositionContextType {
  * Hook to access only selection state (for components that only need selection)
  */
 export function useCompositionSelection() {
-  const { selection, selectedNode, selectNode, clearSelection, setSelection } =
-    useComposition();
-  return { selection, selectedNode, selectNode, clearSelection, setSelection };
+  const {
+    selection,
+    selectedNode,
+    selectNode,
+    clearSelection,
+    setSelection,
+    selectAll,
+    removeSelectedNodes,
+    duplicateSelectedNodes,
+  } = useComposition();
+  return {
+    selection,
+    selectedNode,
+    selectNode,
+    clearSelection,
+    setSelection,
+    selectAll,
+    removeSelectedNodes,
+    duplicateSelectedNodes,
+  };
 }
 
 /**

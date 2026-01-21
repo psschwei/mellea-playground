@@ -28,6 +28,8 @@ export function ConnectedCanvas({
     onConnect,
     setSelection,
     setViewport,
+    selectAll,
+    clearSelection,
   } = useComposition();
 
   // Handle selection changes and update context
@@ -53,6 +55,8 @@ export function ConnectedCanvas({
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       readOnly={readOnly}
+      onSelectAll={selectAll}
+      onClearSelection={clearSelection}
     />
   );
 }

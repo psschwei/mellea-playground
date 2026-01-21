@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useEffect, useRef } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -47,6 +47,10 @@ interface CanvasProps {
   onSelectionChange?: (params: { nodes: Node[]; edges: Edge[] }) => void;
   onViewportChange?: (viewport: Viewport) => void;
   readOnly?: boolean;
+
+  // Selection callbacks
+  onSelectAll?: () => void;
+  onClearSelection?: () => void;
 }
 
 // Default edge styling
@@ -82,7 +86,11 @@ export function Canvas({
   onSelectionChange: externalOnSelectionChange,
   onViewportChange,
   readOnly = false,
+  // Selection callbacks
+  onSelectAll,
+  onClearSelection,
 }: CanvasProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   // Determine if we're in connected mode (external state management)
   const isConnected = externalNodes !== undefined && externalEdges !== undefined;
 
@@ -150,11 +158,45 @@ export function Canvas({
   // ProOptions to remove attribution (if licensed) or keep for free version
   const proOptions = useMemo(() => ({ hideAttribution: false }), []);
 
+  // Keyboard shortcuts for selection
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't handle shortcuts when typing in inputs
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      // Ctrl/Cmd+A: Select all
+      if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
+        event.preventDefault();
+        onSelectAll?.();
+      }
+
+      // Escape: Clear selection
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClearSelection?.();
+      }
+    };
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('keydown', handleKeyDown);
+      return () => container.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [onSelectAll, onClearSelection]);
+
   return (
     <Box
+      ref={containerRef}
       h="100%"
       w="100%"
       position="relative"
+      tabIndex={0}
+      outline="none"
       sx={{
         '& .react-flow': {
           fontFamily: 'Inter, system-ui, sans-serif',

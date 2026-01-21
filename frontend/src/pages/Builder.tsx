@@ -7,8 +7,11 @@ import {
   Button,
   useColorModeValue,
   Badge,
+  Divider,
+  IconButton,
+  Tooltip,
 } from '@chakra-ui/react';
-import { FiPlus, FiSave, FiPlay } from 'react-icons/fi';
+import { FiPlus, FiSave, FiPlay, FiTrash2, FiCopy } from 'react-icons/fi';
 import { ReactFlowProvider } from 'reactflow';
 import {
   ConnectedCanvas,
@@ -86,15 +89,88 @@ const initialEdges = [
 
 // Node details sidebar - uses composition context
 function NodeDetailsSidebar() {
-  const { selectedNode } = useCompositionSelection();
+  const {
+    selection,
+    selectedNode,
+    removeSelectedNodes,
+    duplicateSelectedNodes,
+    clearSelection,
+  } = useCompositionSelection();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
-  if (!selectedNode) {
+  const selectedCount = selection.nodes.length;
+  const selectedEdgeCount = selection.edges.length;
+
+  // No selection
+  if (selectedCount === 0) {
     return null;
   }
 
-  const category = selectedNode.data?.category;
+  // Multi-selection view
+  if (selectedCount > 1) {
+    return (
+      <VStack
+        w="300px"
+        p={4}
+        borderLeft="1px"
+        borderColor={borderColor}
+        bg={bgColor}
+        align="stretch"
+        spacing={4}
+      >
+        <Heading size="sm">Multi-Selection</Heading>
+        <Box>
+          <Text fontSize="sm" fontWeight="medium" color="gray.500">
+            Selected Items
+          </Text>
+          <Text fontSize="sm">
+            {selectedCount} node{selectedCount !== 1 ? 's' : ''}
+            {selectedEdgeCount > 0 && (
+              <>, {selectedEdgeCount} edge{selectedEdgeCount !== 1 ? 's' : ''}</>
+            )}
+          </Text>
+        </Box>
+        <Divider />
+        <Box>
+          <Text fontSize="xs" fontWeight="medium" color="gray.500" mb={2}>
+            Actions
+          </Text>
+          <HStack spacing={2}>
+            <Tooltip label="Duplicate selected (Ctrl+D)">
+              <IconButton
+                aria-label="Duplicate selected"
+                icon={<FiCopy />}
+                size="sm"
+                variant="outline"
+                onClick={duplicateSelectedNodes}
+              />
+            </Tooltip>
+            <Tooltip label="Delete selected (Delete)">
+              <IconButton
+                aria-label="Delete selected"
+                icon={<FiTrash2 />}
+                size="sm"
+                variant="outline"
+                colorScheme="red"
+                onClick={removeSelectedNodes}
+              />
+            </Tooltip>
+          </HStack>
+        </Box>
+        <Divider />
+        <Button size="sm" variant="ghost" onClick={clearSelection}>
+          Clear Selection
+        </Button>
+        <Text fontSize="xs" color="gray.400">
+          Tip: Press Esc to clear selection
+        </Text>
+      </VStack>
+    );
+  }
+
+  // Single selection view
+  const category = selectedNode?.data?.category;
 
   return (
     <VStack
@@ -106,18 +182,41 @@ function NodeDetailsSidebar() {
       align="stretch"
       spacing={4}
     >
-      <Heading size="sm">Node Details</Heading>
+      <HStack justify="space-between">
+        <Heading size="sm">Node Details</Heading>
+        <HStack spacing={1}>
+          <Tooltip label="Duplicate">
+            <IconButton
+              aria-label="Duplicate node"
+              icon={<FiCopy />}
+              size="xs"
+              variant="ghost"
+              onClick={duplicateSelectedNodes}
+            />
+          </Tooltip>
+          <Tooltip label="Delete">
+            <IconButton
+              aria-label="Delete node"
+              icon={<FiTrash2 />}
+              size="xs"
+              variant="ghost"
+              colorScheme="red"
+              onClick={removeSelectedNodes}
+            />
+          </Tooltip>
+        </HStack>
+      </HStack>
       <Box>
         <Text fontSize="sm" fontWeight="medium" color="gray.500">
           ID
         </Text>
-        <Text fontSize="sm">{selectedNode.id}</Text>
+        <Text fontSize="sm">{selectedNode?.id}</Text>
       </Box>
       <Box>
         <Text fontSize="sm" fontWeight="medium" color="gray.500">
           Label
         </Text>
-        <Text fontSize="sm">{selectedNode.data?.label || 'Unnamed'}</Text>
+        <Text fontSize="sm">{selectedNode?.data?.label || 'Unnamed'}</Text>
       </Box>
       <Box>
         <Text fontSize="sm" fontWeight="medium" color="gray.500">
@@ -144,8 +243,8 @@ function NodeDetailsSidebar() {
           Position
         </Text>
         <Text fontSize="sm">
-          x: {Math.round(selectedNode.position.x)}, y:{' '}
-          {Math.round(selectedNode.position.y)}
+          x: {Math.round(selectedNode?.position.x ?? 0)}, y:{' '}
+          {Math.round(selectedNode?.position.y ?? 0)}
         </Text>
       </Box>
     </VStack>
