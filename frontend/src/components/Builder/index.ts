@@ -66,3 +66,12 @@ export {
   type NodeTemplate,
   type RecentlyUsedEntry,
 } from './NodePalette';
+export {
+  BuilderSidebar,
+  programToSidebarItem,
+  modelToSidebarItem,
+  primitiveItems,
+  utilityItems,
+  type SidebarItem,
+  type RecentlyUsedEntry as SidebarRecentlyUsedEntry,
+} from './BuilderSidebar';

@@ -22,11 +22,11 @@ import {
   melleaNodeTypes,
   melleaEdgeTypes,
   defaultEdgeType,
-  NodePalette,
+  BuilderSidebar,
   type MelleaNodeData,
   type CategoryEdgeData,
-  type NodeTemplate,
-  type RecentlyUsedEntry,
+  type SidebarItem,
+  type SidebarRecentlyUsedEntry,
 } from '@/components/Builder';
 import { useRecentlyUsedNodes } from '@/hooks/useRecentlyUsedNodes';
 import type { Node } from 'reactflow';
@@ -373,19 +373,21 @@ function BuilderHeader() {
   );
 }
 
-// Node palette wrapper with add node logic
-function NodePaletteWrapper() {
+// Builder sidebar wrapper with add node logic
+function BuilderSidebarWrapper() {
   const { addNode } = useComposition();
   const { getViewport } = useReactFlow();
   const { recentNodes, recordUsage } = useRecentlyUsedNodes();
 
-  // Convert recent nodes to the format expected by NodePalette
-  const recentlyUsed: RecentlyUsedEntry[] = recentNodes.map((entry) => ({
-    nodeType: entry.nodeType,
+  // Convert recent nodes to the format expected by BuilderSidebar
+  // For built-in items, the itemId matches the pattern like 'primitive-loop', 'utility-input'
+  const recentlyUsed: SidebarRecentlyUsedEntry[] = recentNodes.map((entry) => ({
+    itemId: `${entry.nodeType}-${entry.nodeType}`, // Fallback - will be updated when we track asset IDs
+    nodeType: entry.nodeType as string,
   }));
 
-  const handleNodeSelect = useCallback(
-    (template: NodeTemplate) => {
+  const handleItemSelect = useCallback(
+    (item: SidebarItem) => {
       // Get the current viewport to position the new node in view
       const viewport = getViewport();
 
@@ -395,28 +397,28 @@ function NodePaletteWrapper() {
         y: (-viewport.y + 200) / viewport.zoom,
       };
 
-      // Create a new node from the template
+      // Create a new node from the sidebar item
       const nodeData: MelleaNodeData = {
-        label: template.label,
-        category: template.category,
-        ...(template.defaultData as Partial<MelleaNodeData>),
+        label: item.label,
+        category: item.category,
+        ...(item.defaultData as Partial<MelleaNodeData>),
       };
 
       const newNode: Node<MelleaNodeData> = {
-        id: `${template.type}-${Date.now()}`,
-        type: template.type as string,
+        id: `${item.type}-${Date.now()}`,
+        type: item.type as string,
         position,
         data: nodeData,
       };
 
       addNode(newNode);
-      recordUsage(template.type);
+      recordUsage(item.type);
     },
     [addNode, getViewport, recordUsage]
   );
 
   return (
-    <NodePalette recentlyUsed={recentlyUsed} onNodeSelect={handleNodeSelect} />
+    <BuilderSidebar recentlyUsed={recentlyUsed} onItemSelect={handleItemSelect} />
   );
 }
 
@@ -426,7 +428,7 @@ function BuilderContent() {
     <Box h="calc(100vh - 64px)" display="flex" flexDirection="column">
       <BuilderHeader />
       <Box flex="1" display="flex" overflow="hidden">
-        <NodePaletteWrapper />
+        <BuilderSidebarWrapper />
         <Box flex="1" bg="gray.50">
           <ConnectedCanvas nodeTypes={melleaNodeTypes} edgeTypes={melleaEdgeTypes} />
         </Box>
