@@ -275,7 +275,7 @@ class TestDockerfileGeneration:
         """Test dependency Dockerfile generation."""
         dockerfile, requirements = builder_service.generate_deps_dockerfile(sample_deps)
 
-        assert "FROM mellea-python:3.12" in dockerfile
+        assert "FROM kind-registry:5000/mellea-python:3.12" in dockerfile
         assert "pip install" in dockerfile
 
         assert "requests==2.31.0" in requirements
@@ -323,7 +323,7 @@ class TestDockerfileGeneration:
         )
 
         dockerfile, _ = builder_service.generate_deps_dockerfile(deps)
-        assert "FROM mellea-python:3.11" in dockerfile
+        assert "FROM kind-registry:5000/mellea-python:3.11" in dockerfile
 
     def test_generate_program_dockerfile(
         self,

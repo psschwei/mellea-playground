@@ -68,15 +68,16 @@ if ! kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
 fi
 
 # Build base images first (other images may depend on them)
+# Base images are pushed to local registry (for Kaniko builds inside cluster)
 if $BUILD_BASE; then
     echo "==> Building base Python images..."
 
     # Build Python 3.11 base image
     if [ -f "base-images/python/Dockerfile.3.11" ]; then
         echo "    Building mellea-python:3.11..."
-        docker build -t "mellea-python:3.11" -f base-images/python/Dockerfile.3.11 base-images/python/
-        echo "    Loading mellea-python:3.11 into cluster..."
-        kind load docker-image "mellea-python:3.11" --name "$CLUSTER_NAME"
+        docker build -t "localhost:5001/mellea-python:3.11" -f base-images/python/Dockerfile.3.11 base-images/python/
+        echo "    Pushing mellea-python:3.11 to local registry..."
+        docker push "localhost:5001/mellea-python:3.11"
     else
         echo "Warning: base-images/python/Dockerfile.3.11 not found, skipping"
     fi
@@ -84,9 +85,9 @@ if $BUILD_BASE; then
     # Build Python 3.12 base image
     if [ -f "base-images/python/Dockerfile.3.12" ]; then
         echo "    Building mellea-python:3.12..."
-        docker build -t "mellea-python:3.12" -f base-images/python/Dockerfile.3.12 base-images/python/
-        echo "    Loading mellea-python:3.12 into cluster..."
-        kind load docker-image "mellea-python:3.12" --name "$CLUSTER_NAME"
+        docker build -t "localhost:5001/mellea-python:3.12" -f base-images/python/Dockerfile.3.12 base-images/python/
+        echo "    Pushing mellea-python:3.12 to local registry..."
+        docker push "localhost:5001/mellea-python:3.12"
     else
         echo "Warning: base-images/python/Dockerfile.3.12 not found, skipping"
     fi
