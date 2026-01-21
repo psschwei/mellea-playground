@@ -11,17 +11,24 @@ import {
   IconButton,
   Tooltip,
 } from '@chakra-ui/react';
-import { FiPlus, FiSave, FiPlay, FiTrash2, FiCopy } from 'react-icons/fi';
-import { ReactFlowProvider } from 'reactflow';
+import { FiSave, FiPlay, FiTrash2, FiCopy } from 'react-icons/fi';
+import { ReactFlowProvider, useReactFlow } from 'reactflow';
+import { useCallback } from 'react';
 import {
   ConnectedCanvas,
   CompositionProvider,
   useCompositionSelection,
   useComposition,
-  nodeColors,
   melleaNodeTypes,
+  melleaEdgeTypes,
+  defaultEdgeType,
+  NodePalette,
   type MelleaNodeData,
+  type CategoryEdgeData,
+  type NodeTemplate,
+  type RecentlyUsedEntry,
 } from '@/components/Builder';
+import { useRecentlyUsedNodes } from '@/hooks/useRecentlyUsedNodes';
 import type { Node } from 'reactflow';
 
 // Demo nodes to show the canvas is working with custom node types
@@ -111,7 +118,8 @@ const initialEdges = [
     sourceHandle: 'value',
     target: 'model-1',
     targetHandle: 'input',
-    style: { stroke: nodeColors.utility },
+    type: defaultEdgeType,
+    data: { sourceCategory: 'utility' } as CategoryEdgeData,
   },
   {
     id: 'e-input-program',
@@ -119,7 +127,8 @@ const initialEdges = [
     sourceHandle: 'value',
     target: 'program-1',
     targetHandle: 'text',
-    style: { stroke: nodeColors.utility },
+    type: defaultEdgeType,
+    data: { sourceCategory: 'utility' } as CategoryEdgeData,
   },
   {
     id: 'e-model-merge',
@@ -127,7 +136,8 @@ const initialEdges = [
     sourceHandle: 'output',
     target: 'merge-1',
     targetHandle: 'input1',
-    style: { stroke: nodeColors.model },
+    type: defaultEdgeType,
+    data: { sourceCategory: 'model' } as CategoryEdgeData,
   },
   {
     id: 'e-program-merge',
@@ -135,7 +145,8 @@ const initialEdges = [
     sourceHandle: 'result',
     target: 'merge-1',
     targetHandle: 'input2',
-    style: { stroke: nodeColors.program },
+    type: defaultEdgeType,
+    data: { sourceCategory: 'program' } as CategoryEdgeData,
   },
   {
     id: 'e-merge-output',
@@ -143,7 +154,8 @@ const initialEdges = [
     sourceHandle: 'merged',
     target: 'output-1',
     targetHandle: 'value',
-    style: { stroke: nodeColors.primitive },
+    type: defaultEdgeType,
+    data: { sourceCategory: 'primitive' } as CategoryEdgeData,
   },
 ];
 
@@ -345,9 +357,6 @@ function BuilderHeader() {
         </Text>
       </HStack>
       <HStack spacing={2}>
-        <Button leftIcon={<FiPlus />} size="sm" variant="outline">
-          Add Node
-        </Button>
         <Button
           leftIcon={<FiSave />}
           size="sm"
@@ -364,14 +373,62 @@ function BuilderHeader() {
   );
 }
 
+// Node palette wrapper with add node logic
+function NodePaletteWrapper() {
+  const { addNode } = useComposition();
+  const { getViewport } = useReactFlow();
+  const { recentNodes, recordUsage } = useRecentlyUsedNodes();
+
+  // Convert recent nodes to the format expected by NodePalette
+  const recentlyUsed: RecentlyUsedEntry[] = recentNodes.map((entry) => ({
+    nodeType: entry.nodeType,
+  }));
+
+  const handleNodeSelect = useCallback(
+    (template: NodeTemplate) => {
+      // Get the current viewport to position the new node in view
+      const viewport = getViewport();
+
+      // Calculate a position in the center of the current view
+      const position = {
+        x: (-viewport.x + 400) / viewport.zoom,
+        y: (-viewport.y + 200) / viewport.zoom,
+      };
+
+      // Create a new node from the template
+      const nodeData: MelleaNodeData = {
+        label: template.label,
+        category: template.category,
+        ...(template.defaultData as Partial<MelleaNodeData>),
+      };
+
+      const newNode: Node<MelleaNodeData> = {
+        id: `${template.type}-${Date.now()}`,
+        type: template.type as string,
+        position,
+        data: nodeData,
+      };
+
+      addNode(newNode);
+      recordUsage(template.type);
+    },
+    [addNode, getViewport, recordUsage]
+  );
+
+  return (
+    <NodePalette recentlyUsed={recentlyUsed} onNodeSelect={handleNodeSelect} />
+  );
+}
+
 // Main builder content
 function BuilderContent() {
   return (
     <Box h="calc(100vh - 64px)" display="flex" flexDirection="column">
       <BuilderHeader />
       <Box flex="1" display="flex" overflow="hidden">
+        <NodePaletteWrapper />
         <Box flex="1" bg="gray.50">
-          <ConnectedCanvas nodeTypes={melleaNodeTypes} />
+          <ConnectedCanvas nodeTypes={melleaNodeTypes} edgeTypes={melleaEdgeTypes} />
         </Box>
         <NodeDetailsSidebar />
       </Box>

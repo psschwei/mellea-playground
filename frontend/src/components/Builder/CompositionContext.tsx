@@ -31,6 +31,7 @@ import {
   type EdgeChange,
 } from 'reactflow';
 import { type NodeCategory, type NodeExecutionState } from './theme';
+import { defaultEdgeType, type CategoryEdgeData } from './edges';
 
 // ============================================================================
 // Supporting Types (spec 6.2.1)
@@ -213,6 +214,8 @@ export interface SerializableComposition {
     target: string;
     sourceHandle?: string;
     targetHandle?: string;
+    type?: string;
+    data?: CategoryEdgeData;
   }>;
   viewport: Viewport;
 }
@@ -281,13 +284,31 @@ export function CompositionProvider({
     [onEdgesChange]
   );
 
-  // Connection handler
+  // Connection handler - adds edge with category styling
   const onConnect = useCallback(
     (connection: Connection) => {
-      setEdges((eds) => addEdge(connection, eds));
+      // Find source node to get its category for edge styling
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      const sourceCategory = sourceNode?.data?.category;
+
+      // Create edge with category styling
+      const edgeData: CategoryEdgeData = {
+        sourceCategory,
+      };
+
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...connection,
+            type: defaultEdgeType,
+            data: edgeData,
+          },
+          eds
+        )
+      );
       setIsDirty(true);
     },
-    [setEdges]
+    [setEdges, nodes]
   );
 
   // Node operations
@@ -330,13 +351,31 @@ export function CompositionProvider({
     [setNodes, setEdges]
   );
 
-  // Edge operations
+  // Edge operations - adds edge with category styling
   const handleAddEdge = useCallback(
     (connection: Connection) => {
-      setEdges((eds) => addEdge(connection, eds));
+      // Find source node to get its category for edge styling
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      const sourceCategory = sourceNode?.data?.category;
+
+      // Create edge with category styling
+      const edgeData: CategoryEdgeData = {
+        sourceCategory,
+      };
+
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...connection,
+            type: defaultEdgeType,
+            data: edgeData,
+          },
+          eds
+        )
+      );
       setIsDirty(true);
     },
-    [setEdges]
+    [setEdges, nodes]
   );
 
   const handleRemoveEdge = useCallback(
@@ -483,6 +522,8 @@ export function CompositionProvider({
         target: e.target,
         sourceHandle: e.sourceHandle ?? undefined,
         targetHandle: e.targetHandle ?? undefined,
+        type: e.type,
+        data: e.data as CategoryEdgeData | undefined,
       })),
       viewport,
     };
@@ -505,6 +546,8 @@ export function CompositionProvider({
           target: e.target,
           sourceHandle: e.sourceHandle,
           targetHandle: e.targetHandle,
+          type: e.type || defaultEdgeType,
+          data: e.data,
         }))
       );
       setViewport(state.viewport);
