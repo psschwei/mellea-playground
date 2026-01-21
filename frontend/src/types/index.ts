@@ -281,10 +281,88 @@ export interface TestModelResponse {
   latencyMs?: number;
 }
 
-// Composition asset types (placeholder for future)
+// Composition asset types (spec 6.11.1)
+
+/** Viewport state for composition canvas */
+export interface CompositionViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+/** Input parameter definition for composition */
+export interface CompositionInput {
+  name: string;
+  type: string;
+  required: boolean;
+  defaultValue?: unknown;
+  description?: string;
+}
+
+/** Output definition for composition */
+export interface CompositionOutput {
+  name: string;
+  type: string;
+  description?: string;
+}
+
+/** Serialized node for composition storage */
+export interface CompositionNode {
+  id: string;
+  type: string;
+  position: { x: number; y: number };
+  data: {
+    label: string;
+    category: 'program' | 'model' | 'primitive' | 'utility';
+    icon?: string;
+    parameters?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+}
+
+/** Edge definition for composition graph */
+export interface CompositionEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  animated?: boolean;
+  style?: { stroke?: string };
+  label?: string;
+  dataType?: string;
+}
+
+/** Graph structure for composition */
+export interface CompositionGraph {
+  nodes: CompositionNode[];
+  edges: CompositionEdge[];
+  viewport: CompositionViewport;
+}
+
+/** Executable specification for headless runs */
+export interface CompositionSpec {
+  inputs: CompositionInput[];
+  outputs: CompositionOutput[];
+  nodeExecutionOrder: string[];
+  generatedCode?: string;
+}
+
+/** Full composition asset with graph and spec */
 export interface CompositionAsset extends AssetMetadata {
   type: 'composition';
-  steps: unknown[]; // To be defined
+
+  /** Visual graph definition */
+  graph: CompositionGraph;
+
+  /** Executable specification for headless runs */
+  spec: CompositionSpec;
+
+  /** IDs of referenced program assets */
+  programRefs: string[];
+
+  /** IDs of referenced model assets */
+  modelRefs: string[];
 }
 
 // Union type for all asset types

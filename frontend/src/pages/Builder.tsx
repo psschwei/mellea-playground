@@ -19,71 +19,131 @@ import {
   useCompositionSelection,
   useComposition,
   nodeColors,
+  melleaNodeTypes,
   type MelleaNodeData,
 } from '@/components/Builder';
 import type { Node } from 'reactflow';
 
-// Demo nodes to show the canvas is working
+// Demo nodes to show the canvas is working with custom node types
 const initialNodes: Node<MelleaNodeData>[] = [
   {
     id: 'input-1',
-    type: 'default',
-    position: { x: 100, y: 100 },
+    type: 'utility',
+    position: { x: 50, y: 100 },
     data: {
-      label: 'Input',
+      label: 'User Input',
       category: 'utility',
-    },
-    style: {
-      background: '#ffffff',
-      border: `2px solid ${nodeColors.utility}`,
-      borderRadius: 8,
-      padding: 10,
-    },
+      utilityType: 'input',
+      dataType: 'string',
+    } as MelleaNodeData,
+  },
+  {
+    id: 'model-1',
+    type: 'model',
+    position: { x: 350, y: 50 },
+    data: {
+      label: 'GPT-4',
+      category: 'model',
+      provider: 'OpenAI',
+      modelName: 'gpt-4-turbo',
+      temperature: 0.7,
+      maxTokens: 2048,
+    } as MelleaNodeData,
   },
   {
     id: 'program-1',
-    type: 'default',
-    position: { x: 350, y: 100 },
+    type: 'program',
+    position: { x: 350, y: 250 },
     data: {
-      label: 'Program Node',
+      label: 'Text Processor',
       category: 'program',
-    },
-    style: {
-      background: '#ffffff',
-      border: `2px solid ${nodeColors.program}`,
-      borderRadius: 8,
-      padding: 10,
-    },
+      version: '1.2.0',
+      slots: {
+        inputs: [
+          { id: 'text', label: 'Text' },
+          { id: 'config', label: 'Config' },
+        ],
+        outputs: [
+          { id: 'result', label: 'Result' },
+          { id: 'metadata', label: 'Metadata' },
+        ],
+      },
+    } as MelleaNodeData,
+  },
+  {
+    id: 'merge-1',
+    type: 'primitive',
+    position: { x: 700, y: 150 },
+    data: {
+      label: 'Merge Results',
+      category: 'primitive',
+      primitiveType: 'merge',
+    } as MelleaNodeData,
   },
   {
     id: 'output-1',
-    type: 'default',
-    position: { x: 600, y: 100 },
+    type: 'utility',
+    position: { x: 1000, y: 150 },
     data: {
-      label: 'Output',
+      label: 'Final Output',
       category: 'utility',
-    },
-    style: {
-      background: '#ffffff',
-      border: `2px solid ${nodeColors.utility}`,
-      borderRadius: 8,
-      padding: 10,
-    },
+      utilityType: 'output',
+      dataType: 'object',
+    } as MelleaNodeData,
+  },
+  {
+    id: 'note-1',
+    type: 'utility',
+    position: { x: 50, y: 300 },
+    data: {
+      label: 'Note',
+      category: 'utility',
+      utilityType: 'note',
+      noteText: 'This composition demonstrates the custom node types:\n- Utility nodes for I/O\n- Model nodes for AI\n- Program nodes for logic\n- Primitive nodes for control flow',
+    } as MelleaNodeData,
   },
 ];
 
 const initialEdges = [
   {
-    id: 'e-input-program',
+    id: 'e-input-model',
     source: 'input-1',
-    target: 'program-1',
+    sourceHandle: 'value',
+    target: 'model-1',
+    targetHandle: 'input',
     style: { stroke: nodeColors.utility },
   },
   {
-    id: 'e-program-output',
+    id: 'e-input-program',
+    source: 'input-1',
+    sourceHandle: 'value',
+    target: 'program-1',
+    targetHandle: 'text',
+    style: { stroke: nodeColors.utility },
+  },
+  {
+    id: 'e-model-merge',
+    source: 'model-1',
+    sourceHandle: 'output',
+    target: 'merge-1',
+    targetHandle: 'input1',
+    style: { stroke: nodeColors.model },
+  },
+  {
+    id: 'e-program-merge',
     source: 'program-1',
-    target: 'output-1',
+    sourceHandle: 'result',
+    target: 'merge-1',
+    targetHandle: 'input2',
     style: { stroke: nodeColors.program },
+  },
+  {
+    id: 'e-merge-output',
+    source: 'merge-1',
+    sourceHandle: 'merged',
+    target: 'output-1',
+    targetHandle: 'value',
+    style: { stroke: nodeColors.primitive },
   },
 ];
 
@@ -311,7 +371,7 @@ function BuilderContent() {
       <BuilderHeader />
       <Box flex="1" display="flex" overflow="hidden">
         <Box flex="1" bg="gray.50">
-          <ConnectedCanvas />
+          <ConnectedCanvas nodeTypes={melleaNodeTypes} />
         </Box>
         <NodeDetailsSidebar />
       </Box>

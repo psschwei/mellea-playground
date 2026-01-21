@@ -9,6 +9,10 @@ export {
   useCompositionExecution,
   type MelleaNodeData,
   type SerializableComposition,
+  type SlotSignature,
+  type ParameterValue,
+  type SamplingConfig,
+  type ArtifactRef,
 } from './CompositionContext';
 export {
   nodeColors,
@@ -20,3 +24,11 @@ export {
   type NodeCategory,
   type NodeExecutionState,
 } from './theme';
+export {
+  ProgramNode,
+  ModelNode,
+  PrimitiveNode,
+  UtilityNode,
+  melleaNodeTypes,
+  type MelleaNodeType,
+} from './nodes';

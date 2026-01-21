@@ -32,14 +32,109 @@ import {
 } from 'reactflow';
 import { type NodeCategory, type NodeExecutionState } from './theme';
 
-// Node data interface aligned with spec 6.2.1
+// ============================================================================
+// Supporting Types (spec 6.2.1)
+// ============================================================================
+
+/**
+ * Slot signature for @generative functions
+ * Describes typed arguments and return values
+ */
+export interface SlotSignature {
+  name: string;
+  docstring: string;
+  args: Array<{ name: string; type: string; description?: string }>;
+  returns: { type: string; description?: string };
+}
+
+/**
+ * Parameter value types for node configuration
+ */
+export type ParameterValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ParameterValue[]
+  | { [key: string]: ParameterValue };
+
+/**
+ * Sampling strategy configuration for samplers/IVR nodes
+ */
+export interface SamplingConfig {
+  /** Maximum number of sampling attempts */
+  loopBudget?: number;
+  /** Template for repair attempts */
+  repairTemplate?: string;
+  /** Retry policy: 'none' | 'fixed' | 'exponential' */
+  retryPolicy?: 'none' | 'fixed' | 'exponential';
+  /** Delay between retries in milliseconds */
+  retryDelayMs?: number;
+  /** Maximum retries before failing */
+  maxRetries?: number;
+}
+
+/**
+ * Reference to an artifact produced during node execution
+ */
+export interface ArtifactRef {
+  id: string;
+  name: string;
+  type: 'file' | 'json' | 'text' | 'image';
+  path?: string;
+  size?: number;
+  mimeType?: string;
+  createdAt: string;
+}
+
+// ============================================================================
+// Node Data Interface (spec 6.2.1)
+// ============================================================================
+
+/**
+ * MelleaNodeData - Common data shape for all node types
+ * Enables consistent handling across program, model, primitive, and utility nodes
+ */
 export interface MelleaNodeData {
+  // Display
+  /** Node display label */
   label: string;
+  /** Node category determines color and behavior */
   category: NodeCategory;
+  /** Icon identifier or path */
   icon?: string;
-  parameters?: Record<string, unknown>;
+
+  // Mellea-specific
+  /** For @generative nodes: typed args/returns */
+  slotSignature?: SlotSignature;
+  /** Dependency libraries */
+  requirements?: string[];
+  /** Generated or custom code snippet */
+  pythonCode?: string;
+
+  // Configuration
+  /** Node parameters */
+  parameters?: Record<string, ParameterValue>;
+  /** Sampling strategy: loop_budget, repair_template, etc. */
+  samplingStrategy?: SamplingConfig;
+  /** Per-node model selection override */
+  modelOverride?: string;
+
+  // Callbacks (injected by canvas)
+  /** Called when a parameter value changes */
+  onParameterChange?: (nodeId: string, param: string, value: ParameterValue) => void;
+  /** Called when a slot is wired to another node */
+  onSlotWire?: (nodeId: string, slotName: string, sourceNodeId: string) => void;
+
+  // Runtime state
+  /** Node execution state for visualization */
   executionState?: NodeExecutionState;
+  /** Whether the node is currently being updated */
+  isUpdating?: boolean;
+  /** Last run status */
   lastRunStatus?: 'pending' | 'running' | 'succeeded' | 'failed';
+  /** Artifacts produced by last run */
+  lastRunArtifacts?: ArtifactRef[];
 }
 
 // Selection state
