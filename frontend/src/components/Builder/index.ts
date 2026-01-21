@@ -46,9 +46,18 @@ export {
   CategoryEdge,
   melleaEdgeTypes,
   defaultEdgeType,
+  ValidationConnectionLine,
   type CategoryEdgeData,
   type MelleaEdgeType,
 } from './edges';
+export {
+  ConnectionFeedbackProvider,
+  useConnectionFeedback,
+  useHandleValidation,
+  type ActiveConnection,
+  type HandleValidation,
+  type ConnectionValidationState,
+} from './ConnectionFeedback';
 export {
   NodePalette,
   findTemplate,

@@ -17,6 +17,7 @@ import ReactFlow, {
   OnNodesChange,
   OnEdgesChange,
   Viewport,
+  OnConnectStartParams,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Box } from '@chakra-ui/react';
@@ -26,6 +27,10 @@ import {
   nodeColors,
   NodeCategory,
 } from './theme';
+import { validateConnection } from './utils';
+import { ValidationConnectionLine } from './edges';
+import { useConnectionFeedback } from './ConnectionFeedback';
+import type { MelleaNodeData } from './CompositionContext';
 
 // Props for the Canvas component
 interface CanvasProps {
@@ -51,6 +56,9 @@ interface CanvasProps {
   // Selection callbacks
   onSelectAll?: () => void;
   onClearSelection?: () => void;
+
+  // Connection feedback (optional - uses ConnectionFeedback context if available)
+  useConnectionFeedbackContext?: boolean;
 }
 
 // Default edge styling
@@ -89,10 +97,23 @@ export function Canvas({
   // Selection callbacks
   onSelectAll,
   onClearSelection,
+  // Connection feedback
+  useConnectionFeedbackContext = true,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // Determine if we're in connected mode (external state management)
   const isConnected = externalNodes !== undefined && externalEdges !== undefined;
+
+  // Try to use connection feedback context (may not be available)
+  let connectionFeedback: ReturnType<typeof useConnectionFeedback> | null = null;
+  try {
+    if (useConnectionFeedbackContext) {
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      connectionFeedback = useConnectionFeedback();
+    }
+  } catch {
+    // Context not available, connection feedback disabled
+  }
 
   // Internal state for standalone mode
   const [internalNodes, _setInternalNodes, internalOnNodesChange] =
@@ -147,6 +168,42 @@ export function Canvas({
       }
     },
     [onViewportChange]
+  );
+
+  // Handle connection start (for visual feedback)
+  const handleConnectStart = useCallback(
+    (_event: React.MouseEvent | React.TouchEvent, params: OnConnectStartParams) => {
+      if (connectionFeedback) {
+        connectionFeedback.startConnection(params, nodes as Node<MelleaNodeData>[], edges);
+      }
+    },
+    [connectionFeedback, nodes, edges]
+  );
+
+  // Handle connection end (for visual feedback)
+  const handleConnectEnd = useCallback(() => {
+    if (connectionFeedback) {
+      connectionFeedback.endConnection();
+    }
+  }, [connectionFeedback]);
+
+  // Validate connection in real-time during drag
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      const result = validateConnection(
+        connection,
+        nodes as Node<MelleaNodeData>[],
+        edges
+      );
+
+      // Update feedback context with validation result
+      if (connectionFeedback) {
+        connectionFeedback.updateHoverTarget(connection, nodes as Node<MelleaNodeData>[], edges);
+      }
+
+      return result.valid;
+    },
+    [nodes, edges, connectionFeedback]
   );
 
   // Minimap node color function
@@ -210,6 +267,10 @@ export function Canvas({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onConnectStart={handleConnectStart}
+        onConnectEnd={handleConnectEnd}
+        isValidConnection={isValidConnection}
+        connectionLineComponent={ValidationConnectionLine}
         onSelectionChange={onSelectionChange}
         onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}
@@ -231,6 +292,7 @@ export function Canvas({
         fitViewOptions={{ padding: 0.2 }}
         proOptions={proOptions}
         deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
+        className={connectionFeedback?.isConnecting ? 'connecting' : undefined}
       >
         <Background
           variant={BackgroundVariant.Dots}

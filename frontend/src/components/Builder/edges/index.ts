@@ -10,6 +10,9 @@ import { CategoryEdge } from './CategoryEdge';
 export { CategoryEdge } from './CategoryEdge';
 export type { CategoryEdgeData } from './CategoryEdge';
 
+// Export custom connection line
+export { ValidationConnectionLine } from './ValidationConnectionLine';
+
 // EdgeTypes object for ReactFlow registration
 export const melleaEdgeTypes: EdgeTypes = {
   category: CategoryEdge,

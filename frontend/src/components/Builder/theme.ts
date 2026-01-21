@@ -210,4 +210,35 @@ export const reactFlowContainerStyles = `
   .node-state-running .node-icon {
     animation: node-spin 1s linear infinite;
   }
+
+  /* Connection feedback styles */
+  .react-flow__handle.connecting {
+    animation: handle-pulse 1s ease-in-out infinite;
+  }
+
+  .react-flow__handle.valid-target {
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.4);
+    border-color: #10B981 !important;
+  }
+
+  .react-flow__handle.invalid-target {
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.4);
+    border-color: #EF4444 !important;
+    cursor: not-allowed;
+  }
+
+  @keyframes handle-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+  }
+
+  /* Dim non-valid handles during connection */
+  .react-flow.connecting .react-flow__handle:not(.valid-target):not(.source-handle) {
+    opacity: 0.4;
+  }
+
+  /* Highlight source handle */
+  .react-flow__handle.source-handle {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
+  }
 `;
