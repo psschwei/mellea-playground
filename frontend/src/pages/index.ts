@@ -10,3 +10,4 @@ export { CatalogPage } from './Catalog';
 export { AssetDetailPage } from './AssetDetail';
 export { ModelsPage } from './Models';
 export { BuilderPage } from './Builder';
+export { CompositionsPage } from './Compositions';

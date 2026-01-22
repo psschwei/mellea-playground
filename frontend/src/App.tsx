@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ChakraProvider, extendTheme } from '@chakra-ui/react';
 import { AuthProvider } from '@/contexts';
 import { MainLayout, ProtectedRoute } from '@/components';
-import { LoginPage, RegisterPage, DashboardPage, ProgramsPage, ProgramDetailPage, CredentialsPage, RunsPage, RunDetailPage, CatalogPage, AssetDetailPage, ModelsPage, BuilderPage } from '@/pages';
+import { LoginPage, RegisterPage, DashboardPage, ProgramsPage, ProgramDetailPage, CredentialsPage, RunsPage, RunDetailPage, CatalogPage, AssetDetailPage, ModelsPage, BuilderPage, CompositionsPage } from '@/pages';
 
 // Extend the default Chakra theme
 const theme = extendTheme({
@@ -68,8 +68,12 @@ export function App() {
               <Route path="/credentials" element={<CredentialsPage />} />
               <Route path="/models" element={<ModelsPage />} />
               <Route path="/models/:id" element={<AssetDetailPage />} />
-              <Route path="/compositions" element={<BuilderPage />} />
+              <Route path="/compositions" element={<CompositionsPage />} />
+              <Route path="/compositions/new" element={<BuilderPage />} />
+              <Route path="/compositions/:id/edit" element={<BuilderPage />} />
               <Route path="/compositions/:id" element={<AssetDetailPage />} />
+              <Route path="/builder" element={<BuilderPage />} />
+              <Route path="/builder/:id" element={<BuilderPage />} />
               <Route path="/assets/:id" element={<AssetDetailPage />} />
               <Route path="/runs" element={<RunsPage />} />
               <Route path="/runs/:id" element={<RunDetailPage />} />

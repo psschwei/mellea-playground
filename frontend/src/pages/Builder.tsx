@@ -10,10 +10,27 @@ import {
   Divider,
   IconButton,
   Tooltip,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  ModalCloseButton,
+  useDisclosure,
+  Input,
+  FormControl,
+  FormLabel,
+  Textarea,
+  useToast,
+  Spinner,
+  Alert,
+  AlertIcon,
 } from '@chakra-ui/react';
 import { FiSave, FiPlay, FiTrash2, FiCopy, FiGrid } from 'react-icons/fi';
 import { ReactFlowProvider, useReactFlow } from 'reactflow';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   ConnectedCanvas,
   CompositionProvider,
@@ -27,137 +44,25 @@ import {
   type CategoryEdgeData,
   type SidebarItem,
   type SidebarRecentlyUsedEntry,
+  type SerializableComposition,
 } from '@/components/Builder';
 import { useRecentlyUsedNodes } from '@/hooks/useRecentlyUsedNodes';
-import type { Node } from 'reactflow';
+import { compositionsApi } from '@/api/assets';
+import type { CompositionAsset } from '@/types';
+import type { Node, Edge } from 'reactflow';
 
-// Demo nodes to show the canvas is working with custom node types
-const initialNodes: Node<MelleaNodeData>[] = [
-  {
-    id: 'input-1',
-    type: 'utility',
-    position: { x: 50, y: 100 },
-    data: {
-      label: 'User Input',
-      category: 'utility',
-      utilityType: 'input',
-      dataType: 'string',
-    } as MelleaNodeData,
-  },
-  {
-    id: 'model-1',
-    type: 'model',
-    position: { x: 350, y: 50 },
-    data: {
-      label: 'GPT-4',
-      category: 'model',
-      provider: 'OpenAI',
-      modelName: 'gpt-4-turbo',
-      temperature: 0.7,
-      maxTokens: 2048,
-    } as MelleaNodeData,
-  },
-  {
-    id: 'program-1',
-    type: 'program',
-    position: { x: 350, y: 250 },
-    data: {
-      label: 'Text Processor',
-      category: 'program',
-      version: '1.2.0',
-      slots: {
-        inputs: [
-          { id: 'text', label: 'Text' },
-          { id: 'config', label: 'Config' },
-        ],
-        outputs: [
-          { id: 'result', label: 'Result' },
-          { id: 'metadata', label: 'Metadata' },
-        ],
-      },
-    } as MelleaNodeData,
-  },
-  {
-    id: 'merge-1',
-    type: 'primitive',
-    position: { x: 700, y: 150 },
-    data: {
-      label: 'Merge Results',
-      category: 'primitive',
-      primitiveType: 'merge',
-    } as MelleaNodeData,
-  },
-  {
-    id: 'output-1',
-    type: 'utility',
-    position: { x: 1000, y: 150 },
-    data: {
-      label: 'Final Output',
-      category: 'utility',
-      utilityType: 'output',
-      dataType: 'object',
-    } as MelleaNodeData,
-  },
-  {
-    id: 'note-1',
-    type: 'utility',
-    position: { x: 50, y: 300 },
-    data: {
-      label: 'Note',
-      category: 'utility',
-      utilityType: 'note',
-      noteText: 'This composition demonstrates the custom node types:\n- Utility nodes for I/O\n- Model nodes for AI\n- Program nodes for logic\n- Primitive nodes for control flow',
-    } as MelleaNodeData,
-  },
-];
+// Default empty composition for new compositions
+const emptyNodes: Node<MelleaNodeData>[] = [];
+const emptyEdges: Edge<CategoryEdgeData>[] = [];
 
-const initialEdges = [
-  {
-    id: 'e-input-model',
-    source: 'input-1',
-    sourceHandle: 'value',
-    target: 'model-1',
-    targetHandle: 'input',
-    type: defaultEdgeType,
-    data: { sourceCategory: 'utility' } as CategoryEdgeData,
-  },
-  {
-    id: 'e-input-program',
-    source: 'input-1',
-    sourceHandle: 'value',
-    target: 'program-1',
-    targetHandle: 'text',
-    type: defaultEdgeType,
-    data: { sourceCategory: 'utility' } as CategoryEdgeData,
-  },
-  {
-    id: 'e-model-merge',
-    source: 'model-1',
-    sourceHandle: 'output',
-    target: 'merge-1',
-    targetHandle: 'input1',
-    type: defaultEdgeType,
-    data: { sourceCategory: 'model' } as CategoryEdgeData,
-  },
-  {
-    id: 'e-program-merge',
-    source: 'program-1',
-    sourceHandle: 'result',
-    target: 'merge-1',
-    targetHandle: 'input2',
-    type: defaultEdgeType,
-    data: { sourceCategory: 'program' } as CategoryEdgeData,
-  },
-  {
-    id: 'e-merge-output',
-    source: 'merge-1',
-    sourceHandle: 'merged',
-    target: 'output-1',
-    targetHandle: 'value',
-    type: defaultEdgeType,
-    data: { sourceCategory: 'primitive' } as CategoryEdgeData,
-  },
-];
+// Composition metadata state
+interface CompositionMeta {
+  id?: string;
+  name: string;
+  description: string;
+  tags: string[];
+  version: string;
+}
 
 // Node details sidebar - uses composition context
 function NodeDetailsSidebar() {
@@ -323,18 +228,95 @@ function NodeDetailsSidebar() {
   );
 }
 
-// Header toolbar - uses composition context for dirty state
-function BuilderHeader() {
-  const { isDirty, getSerializableState, markClean, applyAutoLayout } = useComposition();
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
+// Save dialog for naming new compositions
+interface SaveDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (meta: CompositionMeta) => void;
+  initialMeta: CompositionMeta;
+  isSaving: boolean;
+}
+
+function SaveDialog({ isOpen, onClose, onSave, initialMeta, isSaving }: SaveDialogProps) {
+  const [name, setName] = useState(initialMeta.name);
+  const [description, setDescription] = useState(initialMeta.description);
+
+  useEffect(() => {
+    setName(initialMeta.name);
+    setDescription(initialMeta.description);
+  }, [initialMeta, isOpen]);
 
   const handleSave = () => {
-    const state = getSerializableState();
-    console.log('Saving composition:', state);
-    // TODO: Actually save to backend
-    markClean();
+    if (!name.trim()) return;
+    onSave({
+      ...initialMeta,
+      name: name.trim(),
+      description: description.trim(),
+    });
   };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose}>
+      <ModalOverlay />
+      <ModalContent>
+        <ModalHeader>{initialMeta.id ? 'Save Composition' : 'Save New Composition'}</ModalHeader>
+        <ModalCloseButton />
+        <ModalBody>
+          <VStack spacing={4}>
+            <FormControl isRequired>
+              <FormLabel>Name</FormLabel>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="My Composition"
+                autoFocus
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>Description</FormLabel>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe what this composition does..."
+                rows={3}
+              />
+            </FormControl>
+            {initialMeta.id && (
+              <Text fontSize="sm" color="gray.500">
+                Current version: {initialMeta.version} (will auto-increment on save)
+              </Text>
+            )}
+          </VStack>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="ghost" mr={3} onClick={onClose} isDisabled={isSaving}>
+            Cancel
+          </Button>
+          <Button
+            colorScheme="brand"
+            onClick={handleSave}
+            isLoading={isSaving}
+            isDisabled={!name.trim()}
+          >
+            Save
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
+}
+
+// Header toolbar - uses composition context for dirty state
+interface BuilderHeaderProps {
+  meta: CompositionMeta;
+  onSave: () => void;
+  isSaving: boolean;
+}
+
+function BuilderHeader({ meta, onSave, isSaving }: BuilderHeaderProps) {
+  const { isDirty, applyAutoLayout } = useComposition();
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
 
   return (
     <HStack
@@ -348,7 +330,12 @@ function BuilderHeader() {
       <HStack spacing={4}>
         <Heading size="md">Visual Builder</Heading>
         <Text color="gray.500" fontSize="sm">
-          Untitled Composition
+          {meta.name || 'Untitled Composition'}
+          {meta.id && (
+            <Text as="span" color="gray.400" ml={2}>
+              v{meta.version}
+            </Text>
+          )}
           {isDirty && (
             <Text as="span" color="orange.500" ml={1}>
               (unsaved)
@@ -370,7 +357,8 @@ function BuilderHeader() {
           leftIcon={<FiSave />}
           size="sm"
           variant="outline"
-          onClick={handleSave}
+          onClick={onSave}
+          isLoading={isSaving}
         >
           Save
         </Button>
@@ -389,24 +377,19 @@ function BuilderSidebarWrapper() {
   const { recentNodes, recordUsage } = useRecentlyUsedNodes();
 
   // Convert recent nodes to the format expected by BuilderSidebar
-  // For built-in items, the itemId matches the pattern like 'primitive-loop', 'utility-input'
   const recentlyUsed: SidebarRecentlyUsedEntry[] = recentNodes.map((entry) => ({
-    itemId: `${entry.nodeType}-${entry.nodeType}`, // Fallback - will be updated when we track asset IDs
+    itemId: `${entry.nodeType}-${entry.nodeType}`,
     nodeType: entry.nodeType as string,
   }));
 
   const handleItemSelect = useCallback(
     (item: SidebarItem) => {
-      // Get the current viewport to position the new node in view
       const viewport = getViewport();
-
-      // Calculate a position in the center of the current view
       const position = {
         x: (-viewport.x + 400) / viewport.zoom,
         y: (-viewport.y + 200) / viewport.zoom,
       };
 
-      // Create a new node from the sidebar item
       const nodeData: MelleaNodeData = {
         label: item.label,
         category: item.category,
@@ -431,11 +414,200 @@ function BuilderSidebarWrapper() {
   );
 }
 
-// Main builder content
-function BuilderContent() {
+// Main builder content with save/load logic
+interface BuilderContentProps {
+  compositionId?: string;
+  onLoad: (composition: CompositionAsset) => void;
+  meta: CompositionMeta;
+  setMeta: (meta: CompositionMeta) => void;
+}
+
+function BuilderContent({ compositionId, onLoad, meta, setMeta }: BuilderContentProps) {
+  const { getSerializableState, markClean, loadState } = useComposition();
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(!!compositionId);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const toast = useToast();
+
+  // Load composition when ID is provided
+  useEffect(() => {
+    if (compositionId) {
+      setIsLoading(true);
+      setLoadError(null);
+      compositionsApi
+        .get(compositionId)
+        .then((composition) => {
+          onLoad(composition);
+          // Load graph state into context
+          const state: SerializableComposition = {
+            nodes: composition.graph.nodes.map((n) => ({
+              id: n.id,
+              type: n.type,
+              position: n.position,
+              data: n.data as MelleaNodeData,
+            })),
+            edges: composition.graph.edges.map((e) => ({
+              id: e.id,
+              source: e.source,
+              target: e.target,
+              sourceHandle: e.sourceHandle,
+              targetHandle: e.targetHandle,
+              type: defaultEdgeType,
+              data: e.style?.stroke ? { sourceCategory: undefined } : undefined,
+            })),
+            viewport: composition.graph.viewport,
+          };
+          loadState(state);
+          setIsLoading(false);
+        })
+        .catch((err) => {
+          setLoadError(err.message || 'Failed to load composition');
+          setIsLoading(false);
+        });
+    }
+  }, [compositionId, onLoad, loadState]);
+
+  const handleSaveClick = () => {
+    // For new compositions or if we want to update metadata, show dialog
+    if (!meta.id || !meta.name) {
+      onOpen();
+    } else {
+      // Direct save for existing compositions
+      handleSave(meta);
+    }
+  };
+
+  const handleSave = async (saveMeta: CompositionMeta) => {
+    setIsSaving(true);
+    try {
+      const graphState = getSerializableState();
+
+      // Extract program and model refs from nodes
+      // These are stored in node data when linking to catalog assets
+      const programRefs: string[] = [];
+      const modelRefs: string[] = [];
+      graphState.nodes.forEach((n) => {
+        // Access optional asset reference fields via type assertion
+        const data = n.data as MelleaNodeData & { programId?: string; modelId?: string };
+        if (n.data.category === 'program' && data.programId) {
+          programRefs.push(data.programId);
+        }
+        if (n.data.category === 'model' && data.modelId) {
+          modelRefs.push(data.modelId);
+        }
+      });
+
+      const compositionData: CompositionAsset = {
+        id: saveMeta.id || '',
+        type: 'composition',
+        name: saveMeta.name,
+        description: saveMeta.description,
+        tags: saveMeta.tags,
+        version: saveMeta.version,
+        owner: '',
+        sharing: 'private',
+        createdAt: '',
+        updatedAt: '',
+        graph: {
+          nodes: graphState.nodes.map((n) => ({
+            id: n.id,
+            type: n.type,
+            position: n.position,
+            data: {
+              label: n.data.label,
+              category: n.data.category as 'program' | 'model' | 'primitive' | 'utility',
+              icon: n.data.icon,
+              parameters: n.data.parameters as Record<string, unknown>,
+            },
+          })),
+          edges: graphState.edges.map((e) => ({
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle,
+          })),
+          viewport: graphState.viewport,
+        },
+        spec: {
+          inputs: [],
+          outputs: [],
+          nodeExecutionOrder: [],
+        },
+        programRefs,
+        modelRefs,
+      };
+
+      const saved = await compositionsApi.save(compositionData);
+
+      // Update meta with saved data
+      setMeta({
+        id: saved.id,
+        name: saved.name,
+        description: saved.description,
+        tags: saved.tags,
+        version: saved.version,
+      });
+
+      markClean();
+      onClose();
+
+      toast({
+        title: saveMeta.id ? 'Composition saved' : 'Composition created',
+        description: `${saved.name} v${saved.version}`,
+        status: 'success',
+        duration: 3000,
+      });
+
+      // Navigate to edit URL if this was a new composition
+      if (!saveMeta.id) {
+        navigate(`/compositions/${saved.id}/edit`, { replace: true });
+      }
+    } catch (err) {
+      toast({
+        title: 'Save failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Box h="calc(100vh - 64px)" display="flex" alignItems="center" justifyContent="center">
+        <VStack spacing={4}>
+          <Spinner size="xl" color="brand.500" />
+          <Text color="gray.500">Loading composition...</Text>
+        </VStack>
+      </Box>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Box h="calc(100vh - 64px)" display="flex" alignItems="center" justifyContent="center" p={8}>
+        <Alert status="error" maxW="md">
+          <AlertIcon />
+          <VStack align="start" spacing={2}>
+            <Text fontWeight="bold">Failed to load composition</Text>
+            <Text>{loadError}</Text>
+            <Button size="sm" onClick={() => navigate('/compositions')}>
+              Back to Compositions
+            </Button>
+          </VStack>
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box h="calc(100vh - 64px)" display="flex" flexDirection="column">
-      <BuilderHeader />
+      <BuilderHeader meta={meta} onSave={handleSaveClick} isSaving={isSaving} />
       <Box flex="1" display="flex" overflow="hidden">
         <BuilderSidebarWrapper />
         <Box flex="1" bg="gray.50">
@@ -443,18 +615,46 @@ function BuilderContent() {
         </Box>
         <NodeDetailsSidebar />
       </Box>
+      <SaveDialog
+        isOpen={isOpen}
+        onClose={onClose}
+        onSave={handleSave}
+        initialMeta={meta}
+        isSaving={isSaving}
+      />
     </Box>
   );
 }
 
 export function BuilderPage() {
+  const { id } = useParams<{ id: string }>();
+  const [meta, setMeta] = useState<CompositionMeta>({
+    name: '',
+    description: '',
+    tags: [],
+    version: '1.0.0',
+  });
+
+  const handleLoad = useCallback((composition: CompositionAsset) => {
+    setMeta({
+      id: composition.id,
+      name: composition.name,
+      description: composition.description,
+      tags: composition.tags,
+      version: composition.version,
+    });
+    // Initial nodes/edges will be loaded via loadState in BuilderContent
+  }, []);
+
   return (
     <ReactFlowProvider>
-      <CompositionProvider
-        initialNodes={initialNodes}
-        initialEdges={initialEdges}
-      >
-        <BuilderContent />
+      <CompositionProvider initialNodes={emptyNodes} initialEdges={emptyEdges}>
+        <BuilderContent
+          compositionId={id}
+          onLoad={handleLoad}
+          meta={meta}
+          setMeta={setMeta}
+        />
       </CompositionProvider>
     </ReactFlowProvider>
   );
