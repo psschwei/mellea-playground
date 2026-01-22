@@ -19,11 +19,20 @@ export {
   ConnectionValidator,
   createConnectionValidator,
   validateConnection,
+  CodeGenerator,
+  createCodeGenerator,
+  generateCode,
+  topologicalSort,
+  generateStandaloneScript,
+  downloadAsFile,
   type PortDataType,
   type PortDefinition,
   type ValidationResult,
   type ValidationErrorCode,
+  type GeneratedCode,
+  type CodeGeneratorOptions,
 } from './utils';
+export { CodePreviewPanel, CodePreviewButton } from './CodePreviewPanel';
 export {
   nodeColors,
   executionStateStyles,

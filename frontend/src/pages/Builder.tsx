@@ -27,7 +27,7 @@ import {
   Alert,
   AlertIcon,
 } from '@chakra-ui/react';
-import { FiSave, FiPlay, FiTrash2, FiCopy, FiGrid } from 'react-icons/fi';
+import { FiSave, FiPlay, FiTrash2, FiCopy, FiGrid, FiCode } from 'react-icons/fi';
 import { ReactFlowProvider, useReactFlow } from 'reactflow';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -40,6 +40,7 @@ import {
   melleaEdgeTypes,
   defaultEdgeType,
   BuilderSidebar,
+  CodePreviewPanel,
   type MelleaNodeData,
   type CategoryEdgeData,
   type SidebarItem,
@@ -311,9 +312,11 @@ interface BuilderHeaderProps {
   meta: CompositionMeta;
   onSave: () => void;
   isSaving: boolean;
+  showCodePreview: boolean;
+  onToggleCodePreview: () => void;
 }
 
-function BuilderHeader({ meta, onSave, isSaving }: BuilderHeaderProps) {
+function BuilderHeader({ meta, onSave, isSaving, showCodePreview, onToggleCodePreview }: BuilderHeaderProps) {
   const { isDirty, applyAutoLayout } = useComposition();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -351,6 +354,16 @@ function BuilderHeader({ meta, onSave, isSaving }: BuilderHeaderProps) {
             size="sm"
             variant="outline"
             onClick={() => applyAutoLayout()}
+          />
+        </Tooltip>
+        <Tooltip label={showCodePreview ? 'Hide code preview' : 'Show code preview'}>
+          <IconButton
+            aria-label="Toggle code preview"
+            icon={<FiCode />}
+            size="sm"
+            variant={showCodePreview ? 'solid' : 'outline'}
+            colorScheme={showCodePreview ? 'brand' : undefined}
+            onClick={onToggleCodePreview}
           />
         </Tooltip>
         <Button
@@ -428,6 +441,7 @@ function BuilderContent({ compositionId, onLoad, meta, setMeta }: BuilderContent
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(!!compositionId);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showCodePreview, setShowCodePreview] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -607,13 +621,25 @@ function BuilderContent({ compositionId, onLoad, meta, setMeta }: BuilderContent
 
   return (
     <Box h="calc(100vh - 64px)" display="flex" flexDirection="column">
-      <BuilderHeader meta={meta} onSave={handleSaveClick} isSaving={isSaving} />
+      <BuilderHeader
+        meta={meta}
+        onSave={handleSaveClick}
+        isSaving={isSaving}
+        showCodePreview={showCodePreview}
+        onToggleCodePreview={() => setShowCodePreview(!showCodePreview)}
+      />
       <Box flex="1" display="flex" overflow="hidden">
         <BuilderSidebarWrapper />
         <Box flex="1" bg="gray.50">
           <ConnectedCanvas nodeTypes={melleaNodeTypes} edgeTypes={melleaEdgeTypes} />
         </Box>
         <NodeDetailsSidebar />
+        {showCodePreview && (
+          <CodePreviewPanel
+            isExpanded={true}
+            onToggle={() => setShowCodePreview(false)}
+          />
+        )}
       </Box>
       <SaveDialog
         isOpen={isOpen}
