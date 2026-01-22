@@ -13,6 +13,25 @@ from mellea_api.services.auth import (
     RegistrationError,
     get_auth_service,
 )
+from mellea_api.services.code_generator import (
+    CodeGenerator,
+    CodeGeneratorOptions,
+    GeneratedCode,
+    get_code_generator,
+)
+from mellea_api.services.composition_executor import (
+    CompositionExecutor,
+    CompositionNotFoundError,
+    CompositionRunNotFoundError,
+    CompositionRunService,
+    CompositionValidationError,
+    CredentialValidationError,
+    EnvironmentNotReadyError,
+    InvalidCompositionRunStateTransitionError,
+    ValidationResult,
+    get_composition_executor,
+    get_composition_run_service,
+)
 from mellea_api.services.environment import (
     EnvironmentNotFoundError,
     EnvironmentService,
@@ -71,6 +90,23 @@ __all__ = [
     "get_auth_service",
     "AuthenticationError",
     "RegistrationError",
+    # Code generator service
+    "CodeGenerator",
+    "CodeGeneratorOptions",
+    "GeneratedCode",
+    "get_code_generator",
+    # Composition executor service
+    "CompositionExecutor",
+    "CompositionRunService",
+    "get_composition_executor",
+    "get_composition_run_service",
+    "CompositionNotFoundError",
+    "CompositionRunNotFoundError",
+    "CompositionValidationError",
+    "CredentialValidationError",
+    "EnvironmentNotReadyError",
+    "InvalidCompositionRunStateTransitionError",
+    "ValidationResult",
     # Environment service
     "EnvironmentService",
     "get_environment_service",

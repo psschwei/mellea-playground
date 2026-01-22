@@ -5,6 +5,7 @@ from mellea_api.routes.artifacts import router as artifacts_router
 from mellea_api.routes.assets import router as assets_router
 from mellea_api.routes.auth import router as auth_router
 from mellea_api.routes.builds import router as builds_router
+from mellea_api.routes.composition_runs import router as composition_runs_router
 from mellea_api.routes.controller import router as controller_router
 from mellea_api.routes.credentials import router as credentials_router
 from mellea_api.routes.environments import router as environments_router
@@ -20,6 +21,7 @@ __all__ = [
     "assets_router",
     "auth_router",
     "builds_router",
+    "composition_runs_router",
     "controller_router",
     "credentials_router",
     "environments_router",
