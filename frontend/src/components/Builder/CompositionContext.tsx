@@ -33,6 +33,7 @@ import {
 import { type NodeCategory, type NodeExecutionState } from './theme';
 import { defaultEdgeType, type CategoryEdgeData } from './edges';
 import { validateConnection, type ValidationResult } from './utils';
+import { autoLayout, type AutoLayoutOptions } from './autoLayout';
 
 // ============================================================================
 // Supporting Types (spec 6.2.1)
@@ -193,6 +194,9 @@ interface CompositionActions {
 
   // Viewport
   setViewport: (viewport: Viewport) => void;
+
+  // Layout
+  applyAutoLayout: (options?: AutoLayoutOptions) => void;
 
   // Execution state
   setNodeExecutionState: (nodeId: string, state: NodeExecutionState) => void;
@@ -502,6 +506,17 @@ export function CompositionProvider({
     setIsDirty(true);
   }, [selection, nodes, edges, setNodes, setEdges]);
 
+  // Auto-layout operation
+  const applyAutoLayout = useCallback(
+    (options?: AutoLayoutOptions) => {
+      if (nodes.length === 0) return;
+      const layoutedNodes = autoLayout(nodes, edges, options);
+      setNodes(layoutedNodes);
+      setIsDirty(true);
+    },
+    [nodes, edges, setNodes]
+  );
+
   // Execution state operations
   const setNodeExecutionState = useCallback(
     (nodeId: string, state: NodeExecutionState) => {
@@ -640,6 +655,9 @@ export function CompositionProvider({
       // Viewport
       setViewport,
 
+      // Layout
+      applyAutoLayout,
+
       // Execution
       setNodeExecutionState,
       resetExecutionStates,
@@ -675,6 +693,7 @@ export function CompositionProvider({
       selectAll,
       removeSelectedNodes,
       duplicateSelectedNodes,
+      applyAutoLayout,
       setNodeExecutionState,
       resetExecutionStates,
       markClean,

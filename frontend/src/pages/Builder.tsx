@@ -11,7 +11,7 @@ import {
   IconButton,
   Tooltip,
 } from '@chakra-ui/react';
-import { FiSave, FiPlay, FiTrash2, FiCopy } from 'react-icons/fi';
+import { FiSave, FiPlay, FiTrash2, FiCopy, FiGrid } from 'react-icons/fi';
 import { ReactFlowProvider, useReactFlow } from 'reactflow';
 import { useCallback } from 'react';
 import {
@@ -325,7 +325,7 @@ function NodeDetailsSidebar() {
 
 // Header toolbar - uses composition context for dirty state
 function BuilderHeader() {
-  const { isDirty, getSerializableState, markClean } = useComposition();
+  const { isDirty, getSerializableState, markClean, applyAutoLayout } = useComposition();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
@@ -357,6 +357,15 @@ function BuilderHeader() {
         </Text>
       </HStack>
       <HStack spacing={2}>
+        <Tooltip label="Auto-layout nodes">
+          <IconButton
+            aria-label="Auto-layout"
+            icon={<FiGrid />}
+            size="sm"
+            variant="outline"
+            onClick={() => applyAutoLayout()}
+          />
+        </Tooltip>
         <Button
           leftIcon={<FiSave />}
           size="sm"

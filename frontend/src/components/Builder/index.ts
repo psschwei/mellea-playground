@@ -75,3 +75,9 @@ export {
   type SidebarItem,
   type RecentlyUsedEntry as SidebarRecentlyUsedEntry,
 } from './BuilderSidebar';
+export {
+  autoLayout,
+  isGraphMessy,
+  type LayoutDirection,
+  type AutoLayoutOptions,
+} from './autoLayout';
