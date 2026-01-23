@@ -7,11 +7,19 @@ nodes:
   - role: control-plane
     # Port mappings for local access
     extraPortMappings:
-      # API server (FastAPI backend)
+      # Ingress controller HTTP
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      # Ingress controller HTTPS
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+      # API server (FastAPI backend) - NodePort fallback
       - containerPort: 30080
         hostPort: 8080
         protocol: TCP
-      # Frontend dev server
+      # Frontend dev server - NodePort fallback
       - containerPort: 30000
         hostPort: 3000
         protocol: TCP
@@ -19,6 +27,13 @@ nodes:
       - containerPort: 30379
         hostPort: 6379
         protocol: TCP
+    # Mark node as ingress-ready for NGINX ingress controller
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
     # Mount local storage directory for PersistentVolumes
     extraMounts:
       - hostPath: ./data

@@ -61,13 +61,19 @@ kubectl apply -f k8s/overlays/kind/storage/storage-class.yaml
 kubectl apply -f k8s/overlays/kind/storage/persistent-volumes.yaml
 kubectl apply -f k8s/overlays/kind/storage/persistent-volume-claims.yaml
 
+# Deploy NGINX Ingress Controller for Kind
+echo "==> Deploying NGINX Ingress Controller..."
+"$SCRIPT_DIR/install-ingress.sh"
+
 echo ""
 echo "==> Cluster '$CLUSTER_NAME' is ready!"
 echo ""
 echo "Cluster info:"
 echo "  - API Server: kubectl cluster-info"
-echo "  - Backend port: localhost:8080 (NodePort 30080)"
-echo "  - Frontend port: localhost:3000 (NodePort 30000)"
+echo "  - Ingress HTTP: localhost:80"
+echo "  - Ingress HTTPS: localhost:443"
+echo "  - Backend port: localhost:8080 (NodePort 30080) - fallback"
+echo "  - Frontend port: localhost:3000 (NodePort 30000) - fallback"
 echo "  - Redis port: localhost:6379 (NodePort 30379)"
 echo ""
 echo "Namespaces:"

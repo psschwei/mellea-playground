@@ -34,6 +34,14 @@ echo "--- Services ---"
 kubectl get services -n mellea-system
 echo ""
 
+echo "--- Ingress Controller ---"
+kubectl get pods -n ingress-nginx 2>/dev/null || echo "  (ingress-nginx namespace not found)"
+echo ""
+
+echo "--- Ingress Resources ---"
+kubectl get ingress -A 2>/dev/null || echo "  (no ingress resources)"
+echo ""
+
 echo "--- PersistentVolumes ---"
 kubectl get pv -l app.kubernetes.io/part-of=mellea
 echo ""
