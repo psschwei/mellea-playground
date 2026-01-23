@@ -1,5 +1,5 @@
 # Mellea Playground Makefile
-.PHONY: help cluster-up cluster-down cluster-status build load deploy redis-cli clean \
+.PHONY: help cluster-up cluster-down cluster-status build load deploy deploy-openshift redis-cli clean \
         ci-check lint test setup-hooks spin-up-from-scratch
 
 help: ## Show this help
@@ -45,8 +45,11 @@ load: ## Load a Docker image into kind (usage: make load IMAGE=myimage:tag)
 	./scripts/load-image.sh $(IMAGE)
 
 # Deployment
-deploy: ## Deploy all resources to the cluster
-	kubectl apply -k k8s/
+deploy: ## Deploy all resources to the cluster (KinD)
+	kubectl apply -k k8s/overlays/kind/
+
+deploy-openshift: ## Deploy all resources to OpenShift
+	kubectl apply -k k8s/overlays/openshift/
 
 # Development helpers
 redis-cli: ## Open Redis CLI

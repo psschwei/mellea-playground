@@ -21,7 +21,7 @@ echo "==> Creating data directories..."
 mkdir -p data/{assets,workspaces,artifacts,redis}
 
 # Create the cluster
-kind create cluster --config k8s/kind-config.yaml
+kind create cluster --config k8s/overlays/kind/kind-config.yaml
 
 # Wait for cluster to be ready
 echo "==> Waiting for cluster to be ready..."
@@ -45,21 +45,21 @@ sleep 3
 
 # Apply namespaces
 echo "==> Creating namespaces..."
-kubectl apply -f k8s/namespaces/namespaces.yaml
+kubectl apply -f k8s/base/namespaces/namespaces.yaml
 
 # Apply resource quotas and limit ranges
 echo "==> Applying resource quotas..."
-kubectl apply -f k8s/namespaces/resource-quotas.yaml
+kubectl apply -f k8s/base/namespaces/resource-quotas.yaml
 
 # Apply network policies
 echo "==> Applying network policies..."
-kubectl apply -f k8s/namespaces/network-policies.yaml
+kubectl apply -f k8s/overlays/kind/network-policies.yaml
 
 # Apply storage configuration
 echo "==> Configuring storage..."
-kubectl apply -f k8s/storage/storage-class.yaml
-kubectl apply -f k8s/storage/persistent-volumes.yaml
-kubectl apply -f k8s/storage/persistent-volume-claims.yaml
+kubectl apply -f k8s/overlays/kind/storage/storage-class.yaml
+kubectl apply -f k8s/overlays/kind/storage/persistent-volumes.yaml
+kubectl apply -f k8s/overlays/kind/storage/persistent-volume-claims.yaml
 
 echo ""
 echo "==> Cluster '$CLUSTER_NAME' is ready!"

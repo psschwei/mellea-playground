@@ -1,0 +1,31 @@
+# Base Kustomization for Mellea infrastructure
+# Contains shared resources that work across all environments
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Namespaces (apply first)
+  - namespaces/namespaces.yaml
+  - namespaces/resource-quotas.yaml
+
+  # RBAC (after namespaces)
+  - rbac/run-service-account.yaml
+  - rbac/run-manager-binding.yaml
+  - rbac/build-service-account.yaml
+  - rbac/credential-reader-role.yaml
+  - rbac/credential-reader-binding.yaml
+
+  # Redis
+  - redis/redis-config.yaml
+  - redis/redis-deployment.yaml
+
+  # Backend API
+  - backend/deployment.yaml
+
+  # Frontend
+  - frontend/deployment.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: true

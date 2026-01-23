@@ -1,34 +1,9 @@
-# Kustomization for deploying all Mellea infrastructure
+# Root kustomization - redirects to KinD overlay for backwards compatibility
+# For explicit overlay selection, use:
+#   kubectl apply -k k8s/overlays/kind/
+#   kubectl apply -k k8s/overlays/openshift/
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  # Namespaces (apply first)
-  - namespaces/namespaces.yaml
-  - namespaces/resource-quotas.yaml
-  - namespaces/network-policies.yaml
-
-  # RBAC (after namespaces)
-  - rbac/run-service-account.yaml
-  - rbac/run-manager-binding.yaml
-  - rbac/build-service-account.yaml
-  - rbac/credential-reader-role.yaml
-  - rbac/credential-reader-binding.yaml
-
-  # Storage
-  - storage/storage-class.yaml
-  - storage/persistent-volumes.yaml
-  - storage/persistent-volume-claims.yaml
-
-  # Redis
-  - redis/redis-config.yaml
-  - redis/redis-deployment.yaml
-
-  # Backend API
-  - backend/deployment.yaml
-
-  # Frontend
-  - frontend/deployment.yaml
-
-commonLabels:
-  app.kubernetes.io/managed-by: kustomize
+  - overlays/kind

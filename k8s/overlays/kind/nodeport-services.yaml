@@ -1,0 +1,56 @@
+# NodePort services for local KinD access
+# These expose services on fixed ports mapped in kind-config.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mellea-api-nodeport
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    app.kubernetes.io/name: mellea-api
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080
+      name: http
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mellea-frontend-nodeport
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    app.kubernetes.io/component: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: mellea-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30000
+      name: http
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-nodeport
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    app.kubernetes.io/component: redis
+spec:
+  selector:
+    app.kubernetes.io/name: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+      nodePort: 30379
+      name: redis
+  type: NodePort

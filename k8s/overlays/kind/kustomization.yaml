@@ -1,0 +1,31 @@
+# KinD overlay for local development
+# Adds local storage, NodePort services, and KinD-specific configuration
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+  # KinD-specific storage (local PVs)
+  - storage/storage-class.yaml
+  - storage/persistent-volumes.yaml
+  - storage/persistent-volume-claims.yaml
+
+  # KinD-specific network policies (with registry access)
+  - network-policies.yaml
+
+  # NodePort services for local access
+  - nodeport-services.yaml
+
+patches:
+  # Backend: add imagePullPolicy: Never and KinD registry settings
+  - path: backend-patch.yaml
+    target:
+      kind: Deployment
+      name: mellea-api
+
+  # Frontend: add imagePullPolicy: Never
+  - path: frontend-patch.yaml
+    target:
+      kind: Deployment
+      name: mellea-frontend

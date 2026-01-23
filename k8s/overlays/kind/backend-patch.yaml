@@ -1,0 +1,29 @@
+# KinD-specific patches for backend deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mellea-api
+  namespace: mellea-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          imagePullPolicy: Never  # Images loaded locally into KinD
+          env:
+            - name: MELLEA_ENVIRONMENT
+              value: "development"
+            - name: MELLEA_DEBUG
+              value: "true"
+            - name: MELLEA_DATA_DIR
+              value: "/app/data"
+            - name: MELLEA_REDIS_URL
+              value: "redis://redis.mellea-system.svc.cluster.local:6379"
+            - name: MELLEA_OTEL_ENABLED
+              value: "false"
+            - name: MELLEA_BUILD_BACKEND
+              value: "kaniko"
+            - name: MELLEA_REGISTRY_URL
+              value: "kind-registry:5000"  # KinD's local registry (in-cluster address)
+            - name: MELLEA_REGISTRY_INSECURE
+              value: "true"  # Use HTTP for local KinD registry

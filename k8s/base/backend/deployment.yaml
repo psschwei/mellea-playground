@@ -38,7 +38,6 @@ spec:
       containers:
         - name: api
           image: mellea-backend:latest
-          imagePullPolicy: Never  # For kind - images loaded locally
           ports:
             - containerPort: 8000
               name: http
@@ -52,13 +51,9 @@ spec:
             - name: MELLEA_REDIS_URL
               value: "redis://redis.mellea-system.svc.cluster.local:6379"
             - name: MELLEA_OTEL_ENABLED
-              value: "false"  # Enable when collector is deployed
+              value: "false"
             - name: MELLEA_BUILD_BACKEND
               value: "kaniko"
-            - name: MELLEA_REGISTRY_URL
-              value: "kind-registry:5000"  # Kind's local registry (in-cluster address)
-            - name: MELLEA_REGISTRY_INSECURE
-              value: "true"  # Use HTTP for local Kind registry
           volumeMounts:
             - name: assets
               mountPath: /app/data/metadata
@@ -118,22 +113,3 @@ spec:
       targetPort: 8000
       name: http
   type: ClusterIP
----
-# NodePort service for local access
-apiVersion: v1
-kind: Service
-metadata:
-  name: mellea-api-nodeport
-  namespace: mellea-system
-  labels:
-    app.kubernetes.io/part-of: mellea
-    app.kubernetes.io/component: api
-spec:
-  selector:
-    app.kubernetes.io/name: mellea-api
-  ports:
-    - port: 8000
-      targetPort: 8000
-      nodePort: 30080
-      name: http
-  type: NodePort

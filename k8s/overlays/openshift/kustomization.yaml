@@ -1,0 +1,18 @@
+# OpenShift overlay for hosted deployment
+# TODO: Add OpenShift-specific resources:
+# - Dynamic PVCs (no pre-provisioned PVs)
+# - Routes for external access (instead of NodePort)
+# - ImagePullSecrets for private registry
+# - OpenShift-compatible security context constraints
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# OpenShift-specific resources will be added here:
+# - storage/persistent-volume-claims.yaml  (dynamic provisioning)
+# - routes.yaml (OpenShift Routes)
+# - image-pull-secret.yaml
+
+# Patches for OpenShift compatibility will be added here

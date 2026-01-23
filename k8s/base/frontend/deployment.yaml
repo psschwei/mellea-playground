@@ -24,7 +24,6 @@ spec:
       containers:
         - name: frontend
           image: mellea-frontend:latest
-          imagePullPolicy: Never  # For kind - images loaded locally
           ports:
             - containerPort: 80
               name: http
@@ -64,22 +63,3 @@ spec:
       targetPort: 80
       name: http
   type: ClusterIP
----
-# NodePort service for local access
-apiVersion: v1
-kind: Service
-metadata:
-  name: mellea-frontend-nodeport
-  namespace: mellea-system
-  labels:
-    app.kubernetes.io/part-of: mellea
-    app.kubernetes.io/component: frontend
-spec:
-  selector:
-    app.kubernetes.io/name: mellea-frontend
-  ports:
-    - port: 80
-      targetPort: 80
-      nodePort: 30000
-      name: http
-  type: NodePort

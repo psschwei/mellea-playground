@@ -1,0 +1,12 @@
+# KinD-specific patches for frontend deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mellea-frontend
+  namespace: mellea-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: frontend
+          imagePullPolicy: Never  # Images loaded locally into KinD

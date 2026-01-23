@@ -81,22 +81,3 @@ spec:
       targetPort: 6379
       name: redis
   type: ClusterIP
----
-# NodePort service for local debugging access
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis-nodeport
-  namespace: mellea-system
-  labels:
-    app.kubernetes.io/part-of: mellea
-    app.kubernetes.io/component: redis
-spec:
-  selector:
-    app.kubernetes.io/name: redis
-  ports:
-    - port: 6379
-      targetPort: 6379
-      nodePort: 30379
-      name: redis
-  type: NodePort
