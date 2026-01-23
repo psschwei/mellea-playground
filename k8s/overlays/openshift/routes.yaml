@@ -1,0 +1,58 @@
+# OpenShift Routes for external access
+# These replace Kubernetes Ingress for OpenShift deployments
+#
+# IMPORTANT: Both routes share the same hostname to enable path-based routing.
+# The hostname is auto-generated from the frontend route name.
+# To use a custom hostname, patch the routes:
+#   oc patch route mellea-frontend -p '{"spec":{"host":"your-domain.com"}}'
+#   oc patch route mellea-api -p '{"spec":{"host":"your-domain.com"}}'
+---
+# Frontend Route - Primary entry point for the web UI
+# Handles all paths EXCEPT /api (which goes to the API route)
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mellea-frontend
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    app.kubernetes.io/component: frontend
+  annotations:
+    haproxy.router.openshift.io/enable-http2: "true"
+spec:
+  port:
+    targetPort: http
+  to:
+    kind: Service
+    name: mellea-frontend
+    weight: 100
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+---
+# Backend API Route - Handles /api/* requests
+# Must share hostname with frontend for path-based routing to work
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mellea-api
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    app.kubernetes.io/component: api
+  annotations:
+    haproxy.router.openshift.io/enable-http2: "true"
+    haproxy.router.openshift.io/rewrite-target: /
+spec:
+  path: /api
+  port:
+    targetPort: http
+  to:
+    kind: Service
+    name: mellea-api
+    weight: 100
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

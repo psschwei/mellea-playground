@@ -1,0 +1,22 @@
+# Hostname patch for OpenShift Routes
+# Uncomment and set your hostname to customize the route URLs
+# Both routes must use the same hostname for path-based routing to work
+#
+# Usage: Edit this file with your desired hostname, then deploy
+# Example hostname: mellea.apps.your-cluster.example.com
+---
+# apiVersion: route.openshift.io/v1
+# kind: Route
+# metadata:
+#   name: mellea-frontend
+#   namespace: mellea-system
+# spec:
+#   host: mellea.apps.your-cluster.example.com
+# ---
+# apiVersion: route.openshift.io/v1
+# kind: Route
+# metadata:
+#   name: mellea-api
+#   namespace: mellea-system
+# spec:
+#   host: mellea.apps.your-cluster.example.com

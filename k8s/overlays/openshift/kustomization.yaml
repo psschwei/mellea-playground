@@ -1,17 +1,15 @@
 # OpenShift overlay for hosted deployment
-# TODO: Add OpenShift-specific resources:
-# - Routes for external access (instead of NodePort)
-# - ImagePullSecrets for private registry
-# - OpenShift-compatible security context constraints
+# Deploys to a hosted OpenShift cluster with namespace-only access
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
   - ../../base
   - storage/persistent-volume-claims.yaml
+  - routes.yaml
 
-# OpenShift-specific resources will be added here:
-# - routes.yaml (OpenShift Routes)
-# - image-pull-secret.yaml
+# Optional patches:
+# - hostname-patch.yaml  # Uncomment to set custom hostname for routes
 
-# Patches for OpenShift compatibility will be added here
+# TODO: Add when needed:
+# - image-pull-secret.yaml  # For private registry access

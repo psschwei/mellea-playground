@@ -25,7 +25,5 @@ resources:
   # Frontend
   - frontend/deployment.yaml
 
-labels:
-  - pairs:
-      app.kubernetes.io/managed-by: kustomize
-    includeSelectors: true
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
