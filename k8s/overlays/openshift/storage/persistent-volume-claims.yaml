@@ -1,0 +1,60 @@
+# PersistentVolumeClaims for Mellea services on OpenShift
+# Uses dynamic provisioning - no PersistentVolumes required
+# Uses the cluster's default StorageClass
+# To use a specific StorageClass, uncomment and set storageClassName in each PVC
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mellea-assets-pvc
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mellea-workspaces-pvc
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mellea-artifacts-pvc
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mellea-redis-pvc
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

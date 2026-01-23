@@ -1,6 +1,5 @@
 # OpenShift overlay for hosted deployment
 # TODO: Add OpenShift-specific resources:
-# - Dynamic PVCs (no pre-provisioned PVs)
 # - Routes for external access (instead of NodePort)
 # - ImagePullSecrets for private registry
 # - OpenShift-compatible security context constraints
@@ -9,9 +8,9 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - storage/persistent-volume-claims.yaml
 
 # OpenShift-specific resources will be added here:
-# - storage/persistent-volume-claims.yaml  (dynamic provisioning)
 # - routes.yaml (OpenShift Routes)
 # - image-pull-secret.yaml
 
