@@ -13,6 +13,7 @@ import {
   type CompositionRun,
   type ProgressResponse,
   type NodeExecutionStatus,
+  type ResumeRunResponse,
 } from '@/api/compositionRuns';
 import { type NodeExecutionState as CanvasNodeExecutionState } from '@/components/Builder/theme';
 
@@ -76,6 +77,11 @@ export interface UseCompositionExecutionReturn extends ExecutionState {
     inputs?: Record<string, unknown>;
     credentialIds?: string[];
   }) => Promise<CompositionRun | null>;
+  /** Resume a failed composition run from a specific node */
+  resumeRun: (
+    runId: string,
+    fromNodeId?: string
+  ) => Promise<ResumeRunResponse | null>;
   /** Cancel the current run */
   cancelRun: (force?: boolean) => Promise<void>;
   /** Reset execution state */
@@ -286,9 +292,71 @@ export function useCompositionExecution(
     onResetStates();
   }, [onResetStates]);
 
+  // Resume a failed composition run from a specific node
+  const resumeRun = useCallback(
+    async (
+      runId: string,
+      fromNodeId?: string
+    ): Promise<ResumeRunResponse | null> => {
+      // Reset state
+      setState({
+        isRunning: true,
+        currentRun: null,
+        error: null,
+        progress: null,
+      });
+
+      // Reset canvas node states
+      onResetStates();
+
+      try {
+        // Resume the run
+        const resumeResponse = await compositionRunsApi.resume(runId, {
+          fromNodeId,
+        });
+
+        setState((prev) => ({
+          ...prev,
+          currentRun: resumeResponse.run,
+        }));
+
+        // Initialize canvas states based on the new run's node states
+        // Skipped nodes should show as skipped, others as queued
+        resumeResponse.run.executionOrder.forEach((nodeId) => {
+          const nodeState = resumeResponse.run.nodeStates[nodeId];
+          if (nodeState?.status === 'skipped') {
+            onNodeStateChange(nodeId, 'skipped');
+          } else {
+            onNodeStateChange(nodeId, 'queued');
+          }
+        });
+
+        // Start polling for progress
+        pollProgress(resumeResponse.run.id);
+
+        return resumeResponse;
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : 'Failed to resume composition run';
+
+        setState((prev) => ({
+          ...prev,
+          isRunning: false,
+          error: errorMessage,
+        }));
+
+        return null;
+      }
+    },
+    [onResetStates, onNodeStateChange, pollProgress]
+  );
+
   return {
     ...state,
     startRun,
+    resumeRun,
     cancelRun,
     reset,
   };

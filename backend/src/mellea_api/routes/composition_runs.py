@@ -14,6 +14,7 @@ from mellea_api.core.deps import CurrentUser, CurrentUserSSE
 from mellea_api.models.common import RunExecutionStatus
 from mellea_api.models.composition_run import CompositionRun, NodeExecutionState
 from mellea_api.services.composition_executor import (
+    CannotResumeRunError,
     CompositionExecutor,
     CompositionNotFoundError,
     CompositionRunNotFoundError,
@@ -118,6 +119,34 @@ class AppendNodeLogRequest(BaseModel):
 
     message: str = Field(description="Log message to append")
     timestamp: str | None = Field(default=None, description="Optional timestamp for the log entry")
+
+
+class ResumeRunRequest(BaseModel):
+    """Request body for resuming a failed composition run."""
+
+    from_node_id: str | None = Field(
+        default=None,
+        alias="fromNodeId",
+        description=(
+            "Node ID to resume execution from. If not specified, "
+            "resumes from the first failed node in execution order."
+        ),
+    )
+
+    class Config:
+        populate_by_name = True
+
+
+class ResumeRunResponse(BaseModel):
+    """Response for resume run operation."""
+
+    run: CompositionRun
+    original_run_id: str = Field(alias="originalRunId")
+    resumed_from_node: str = Field(alias="resumedFromNode")
+    skipped_nodes: list[str] = Field(alias="skippedNodes")
+
+    class Config:
+        populate_by_name = True
 
 
 # =============================================================================
@@ -359,6 +388,86 @@ async def sync_composition_run_status(
     except CompositionRunNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+
+@router.post("/{run_id}/resume", response_model=ResumeRunResponse, status_code=status.HTTP_201_CREATED)
+async def resume_composition_run(
+    run_id: str,
+    current_user: CurrentUser,
+    executor: CompositionExecutorDep,
+    request: ResumeRunRequest | None = None,
+) -> ResumeRunResponse:
+    """Resume a failed composition run from a specific node.
+
+    Creates a new run that reuses the outputs from succeeded nodes in the
+    original run and re-executes starting from the specified node (or the
+    first failed node if not specified).
+
+    This is useful when a composition fails partway through execution and
+    you want to retry from the point of failure without re-running nodes
+    that already succeeded.
+
+    Args:
+        run_id: ID of the failed run to resume
+        request: Optional request body with fromNodeId to specify resume point
+
+    Returns:
+        The new CompositionRun along with metadata about the resume operation
+
+    Raises:
+        404: If the original run doesn't exist
+        400: If the run cannot be resumed (not failed, composition changed, etc.)
+    """
+    try:
+        from_node_id = request.from_node_id if request else None
+        new_run = executor.resume_run(run_id, from_node_id=from_node_id)
+
+        # Determine which nodes were skipped
+        skipped_nodes = [
+            node_id
+            for node_id, state in new_run.node_states.items()
+            if state.status.value == "skipped"
+        ]
+
+        # Find the resume point
+        resumed_from_node = from_node_id
+        if resumed_from_node is None:
+            # Find first non-skipped node
+            for node_id in new_run.execution_order:
+                if node_id not in skipped_nodes:
+                    resumed_from_node = node_id
+                    break
+
+        return ResumeRunResponse(
+            run=new_run,
+            originalRunId=run_id,
+            resumedFromNode=resumed_from_node or new_run.execution_order[0],
+            skippedNodes=skipped_nodes,
+        )
+
+    except CompositionRunNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+    except CannotResumeRunError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+    except EnvironmentNotReadyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+    except CredentialValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
 

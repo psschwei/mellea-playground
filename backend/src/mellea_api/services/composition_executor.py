@@ -1,5 +1,6 @@
 """CompositionExecutor for executing composition workflows on Kubernetes."""
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -15,7 +16,12 @@ from mellea_api.models.composition_run import (
     NodeExecutionStatus,
 )
 from mellea_api.services.assets import AssetService, get_asset_service
-from mellea_api.services.code_generator import CodeGenerator, GeneratedCode, get_code_generator
+from mellea_api.services.code_generator import (
+    CodeGenerator,
+    GeneratedCode,
+    get_code_generator,
+    to_variable_name,
+)
 from mellea_api.services.credentials import CredentialService, get_credential_service
 from mellea_api.services.environment import EnvironmentService, get_environment_service
 from mellea_api.services.k8s_jobs import K8sJobService, get_k8s_job_service
@@ -63,6 +69,12 @@ class EnvironmentNotReadyError(Exception):
 
 class CredentialValidationError(Exception):
     """Raised when credential validation fails before run submission."""
+
+    pass
+
+
+class CannotResumeRunError(Exception):
+    """Raised when a run cannot be resumed (not failed, no failed nodes, etc.)."""
 
     pass
 
@@ -906,6 +918,320 @@ class CompositionExecutor:
 
         # Cancel the run
         return self.run_service.cancel_run(run_id)
+
+    def resume_run(
+        self,
+        run_id: str,
+        from_node_id: str | None = None,
+    ) -> CompositionRun:
+        """Resume a failed composition run from a specific node.
+
+        Creates a new run that reuses the outputs from succeeded nodes in the
+        original run and re-executes starting from the specified node (or the
+        first failed node if not specified).
+
+        Args:
+            run_id: ID of the failed run to resume
+            from_node_id: Node ID to resume from. If None, resumes from the
+                first failed node in execution order.
+
+        Returns:
+            New CompositionRun that continues from the specified node
+
+        Raises:
+            CompositionRunNotFoundError: If the original run doesn't exist
+            CannotResumeRunError: If the run cannot be resumed (not failed,
+                composition changed, etc.)
+        """
+        # Get the original run
+        original_run = self.run_service.get_run(run_id)
+        if original_run is None:
+            raise CompositionRunNotFoundError(f"Composition run not found: {run_id}")
+
+        # Validate the run is in a resumable state
+        if original_run.status != RunExecutionStatus.FAILED:
+            raise CannotResumeRunError(
+                f"Cannot resume run {run_id}: run is in {original_run.status.value} state, "
+                "only FAILED runs can be resumed"
+            )
+
+        if not original_run.has_failed_nodes():
+            raise CannotResumeRunError(
+                f"Cannot resume run {run_id}: no failed nodes found"
+            )
+
+        # Determine the node to resume from
+        if from_node_id is None:
+            # Find the first failed node in execution order
+            for node_id in original_run.execution_order:
+                state = original_run.get_node_state(node_id)
+                if state and state.status == NodeExecutionStatus.FAILED:
+                    from_node_id = node_id
+                    break
+
+        if from_node_id is None:
+            raise CannotResumeRunError(
+                f"Cannot resume run {run_id}: could not determine resume point"
+            )
+
+        # Validate the from_node_id exists in the execution order
+        if from_node_id not in original_run.execution_order:
+            raise CannotResumeRunError(
+                f"Cannot resume run {run_id}: node {from_node_id} not found in execution order"
+            )
+
+        # Get the composition (validates it still exists)
+        try:
+            composition = self._get_composition(original_run.composition_id)
+        except CompositionNotFoundError as e:
+            raise CannotResumeRunError(
+                f"Cannot resume run {run_id}: composition no longer exists"
+            ) from e
+
+        # Get the environment
+        env = self.environment_service.get_environment(original_run.environment_id)
+        if env is None:
+            raise CannotResumeRunError(
+                f"Cannot resume run {run_id}: environment no longer exists"
+            )
+        if not env.image_tag:
+            raise CannotResumeRunError(
+                f"Cannot resume run {run_id}: environment has no image tag"
+            )
+
+        # Build cached outputs from succeeded nodes before the resume point
+        cached_outputs: dict[str, Any] = {}
+        resume_index = original_run.execution_order.index(from_node_id)
+
+        for i, node_id in enumerate(original_run.execution_order):
+            if i >= resume_index:
+                break
+            state = original_run.get_node_state(node_id)
+            if state and state.status == NodeExecutionStatus.SUCCEEDED:
+                cached_outputs[node_id] = state.output
+
+        # Generate code with cached outputs
+        nodes = composition.graph.nodes
+        edges = composition.graph.edges
+        generated = self.code_generator.generate(nodes, edges)
+
+        # Modify the generated code to include cached outputs
+        modified_code = self._inject_cached_outputs(
+            generated.code, cached_outputs, from_node_id
+        )
+
+        # Validate credentials if any
+        cred_ids = original_run.credential_ids or []
+        for cred_id in cred_ids:
+            credential = self.credential_service.get_credential(cred_id)
+            if credential is None:
+                raise CannotResumeRunError(
+                    f"Cannot resume run {run_id}: credential {cred_id} no longer exists"
+                )
+            if credential.is_expired:
+                raise CannotResumeRunError(
+                    f"Cannot resume run {run_id}: credential {cred_id} has expired"
+                )
+
+        # Create a new run
+        new_run = self.run_service.create_run(
+            owner_id=original_run.owner_id,
+            environment_id=original_run.environment_id,
+            composition_id=original_run.composition_id,
+            inputs=original_run.inputs,
+            credential_ids=cred_ids,
+        )
+
+        # Generate job name and transition to STARTING
+        job_name = f"mellea-comp-{new_run.id[:8].lower()}"
+        new_run = self.run_service.start_run(
+            new_run.id,
+            job_name=job_name,
+            execution_order=generated.execution_order,
+            generated_code=modified_code,
+        )
+
+        # Mark nodes before resume point as SKIPPED with their cached outputs
+        for node_id, output in cached_outputs.items():
+            self.run_service.update_node_state(
+                new_run.id,
+                node_id,
+                NodeExecutionStatus.SKIPPED,
+                output=output,
+            )
+            # Add a log entry explaining why this node was skipped
+            self.run_service.append_node_log(
+                new_run.id,
+                node_id,
+                f"Skipped: using cached output from previous run {run_id}",
+            )
+
+        # Resolve credential IDs to K8s secret names
+        secret_names: list[str] = []
+        for cred_id in cred_ids:
+            secret_name = self.credential_service.get_k8s_secret_name(cred_id)
+            if secret_name:
+                secret_names.append(secret_name)
+
+        # Create the K8s job
+        try:
+            self.k8s_service.create_run_job(
+                environment_id=new_run.environment_id,
+                image_tag=env.image_tag,
+                resource_limits=env.resource_limits,
+                entrypoint="composition_runner.py",
+                secret_names=secret_names,
+            )
+        except RuntimeError as e:
+            logger.error(
+                "Failed to create K8s job for resumed composition run %s: %s",
+                new_run.id,
+                e,
+            )
+            return self.run_service.mark_failed(
+                new_run.id, error=f"Failed to create K8s job: {e}"
+            )
+
+        logger.info(
+            "Resumed composition run %s from node %s as new run %s (K8s job %s)",
+            run_id,
+            from_node_id,
+            new_run.id,
+            job_name,
+        )
+        return new_run
+
+    def _inject_cached_outputs(
+        self,
+        code: str,
+        cached_outputs: dict[str, Any],
+        from_node_id: str,
+    ) -> str:
+        """Inject cached outputs into generated code for resumed runs.
+
+        Modifies the generated code to:
+        1. Define cached outputs at the start of the function
+        2. Skip execution for nodes with cached outputs
+
+        Args:
+            code: The original generated Python code
+            cached_outputs: Dict mapping node IDs to their cached outputs
+            from_node_id: The node ID to resume execution from
+
+        Returns:
+            Modified code with cached outputs injected
+        """
+        if not cached_outputs:
+            return code
+
+        # Build the cached outputs initialization code
+        cached_lines = [
+            "",
+            "    # Cached outputs from previous run (partial re-run)",
+            "    _cached_outputs = {",
+        ]
+        for node_id, output in cached_outputs.items():
+            var_name = to_variable_name(node_id)
+            try:
+                output_repr = json.dumps(output)
+            except (TypeError, ValueError):
+                output_repr = repr(output)
+            cached_lines.append(f'        "{node_id}": {output_repr},')
+        cached_lines.append("    }")
+        cached_lines.append("")
+
+        # Build variable assignments for cached nodes
+        for node_id in cached_outputs:
+            var_name = to_variable_name(node_id)
+            cached_lines.append(
+                f'    {var_name}_output = _cached_outputs["{node_id}"]'
+            )
+        cached_lines.append("")
+        cached_lines.append(f'    # Resuming execution from node: {from_node_id}')
+
+        cached_code = "\n".join(cached_lines)
+
+        # Find the insertion point (after the function docstring)
+        lines = code.split("\n")
+        insert_index = -1
+
+        in_function = False
+        for i, line in enumerate(lines):
+            if line.strip().startswith("async def run_workflow") or line.strip().startswith("def run_workflow"):
+                in_function = True
+                continue
+            if in_function and '"""' in line:
+                # Found the closing docstring
+                insert_index = i + 1
+                break
+
+        if insert_index == -1:
+            # Fallback: insert after function definition
+            for i, line in enumerate(lines):
+                if line.strip().startswith("async def run_workflow") or line.strip().startswith("def run_workflow"):
+                    insert_index = i + 1
+                    break
+
+        if insert_index == -1:
+            # Last resort: prepend to code
+            return cached_code + "\n" + code
+
+        # Remove code generation for cached nodes (they'll use cached values)
+        # We need to identify and remove the code blocks for cached nodes
+        result_lines = lines[:insert_index]
+        result_lines.append(cached_code)
+
+        # Track which nodes to skip
+        skip_nodes = set(cached_outputs.keys())
+
+        # Process remaining lines, skipping code for cached nodes
+        i = insert_index
+        while i < len(lines):
+            line = lines[i]
+
+            # Check if this line starts a cached node's code block
+            skip_this_block = False
+            for node_id in skip_nodes:
+                var_name = to_variable_name(node_id)
+                # Check for comments or variable assignments related to this node
+                if any(
+                    marker in line
+                    for marker in ["# Program:", "# Model:", "# Input:", "# Output:", "# Constant:"]
+                ):
+                    # Look ahead to see if the next line has this node's variable
+                    if i + 1 < len(lines):
+                        next_line = lines[i + 1]
+                        if f"{var_name}_output" in next_line or f'log_node("{node_id}"' in next_line:
+                            skip_this_block = True
+                            break
+                elif (
+                    f'log_node("{node_id}"' in line
+                    or (f"{var_name}_output = " in line and "cached_outputs" not in line)
+                ):
+                    skip_this_block = True
+                    break
+
+            if skip_this_block:
+                # Skip until we hit an empty line or another node's code
+                i += 1
+                while i < len(lines) and lines[i].strip() and not lines[i].strip().startswith("#"):
+                    # Check if this line is for a different node
+                    is_different_node = False
+                    for other_id in skip_nodes:
+                        if other_id != node_id:
+                            other_var = to_variable_name(other_id)
+                            if f"{other_var}_output = " in lines[i]:
+                                is_different_node = True
+                                break
+                    if is_different_node:
+                        break
+                    i += 1
+                continue
+
+            result_lines.append(line)
+            i += 1
+
+        return "\n".join(result_lines)
 
     def get_run(self, run_id: str) -> CompositionRun | None:
         """Get a composition run by ID.

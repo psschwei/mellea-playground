@@ -87,6 +87,14 @@ export interface GeneratedCodeResponse {
   warnings: string[];
 }
 
+/** Resume run response */
+export interface ResumeRunResponse {
+  run: CompositionRun;
+  originalRunId: string;
+  resumedFromNode: string;
+  skippedNodes: string[];
+}
+
 // =============================================================================
 // API Response Wrappers
 // =============================================================================
@@ -172,6 +180,22 @@ export const compositionRunsApi = {
       `/composition-runs/${id}/sync`
     );
     return response.data.run;
+  },
+
+  /**
+   * Resume a failed composition run from a specific node.
+   * Creates a new run that reuses outputs from succeeded nodes and
+   * re-executes starting from the failed node (or specified node).
+   */
+  resume: async (
+    id: string,
+    options?: { fromNodeId?: string }
+  ): Promise<ResumeRunResponse> => {
+    const response = await apiClient.post<ResumeRunResponse>(
+      `/composition-runs/${id}/resume`,
+      options?.fromNodeId ? { fromNodeId: options.fromNodeId } : undefined
+    );
+    return response.data;
   },
 
   /**
