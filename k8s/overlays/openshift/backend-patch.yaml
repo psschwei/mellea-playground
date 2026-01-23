@@ -1,0 +1,33 @@
+# Patch backend deployment for OpenShift SCC compatibility
+# - Removes init container that requires root (OpenShift handles permissions via fsGroup)
+# - Adds security context for arbitrary UID compatibility
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mellea-api
+  namespace: mellea-system
+spec:
+  template:
+    spec:
+      # OpenShift assigns arbitrary UIDs; fsGroup ensures volume access
+      securityContext:
+        # fsGroup makes volumes writable by the group, eliminating need for chown
+        fsGroup: 0
+        # Ensure files created have group write permission
+        fsGroupChangePolicy: OnRootMismatch
+      # Remove the init container by marking it with $patch: delete
+      initContainers:
+        - name: init-permissions
+          $patch: delete
+      containers:
+        - name: api
+          securityContext:
+            # OpenShift runs as arbitrary non-root UID
+            runAsNonRoot: true
+            # Allow container to run with any UID assigned by OpenShift
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault

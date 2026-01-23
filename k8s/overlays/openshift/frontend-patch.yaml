@@ -1,0 +1,29 @@
+# Patch frontend deployment for OpenShift SCC compatibility
+# - Adds security context for arbitrary UID compatibility
+# - Note: Container image must be configured to run as non-root
+#   (nginx should listen on unprivileged port 8080, not 80)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mellea-frontend
+  namespace: mellea-system
+spec:
+  template:
+    spec:
+      securityContext:
+        fsGroup: 0
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: frontend
+          # Override port if image is configured to run on 8080 for non-root
+          # ports:
+          #   - containerPort: 8080
+          #     name: http
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault

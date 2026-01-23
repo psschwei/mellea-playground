@@ -8,8 +8,10 @@ resources:
   - storage/persistent-volume-claims.yaml
   - routes.yaml
 
-# Optional patches:
-# - hostname-patch.yaml  # Uncomment to set custom hostname for routes
+# Strategic merge patches for OpenShift SCC compatibility
+patchesStrategicMerge:
+  - backend-patch.yaml
+  - frontend-patch.yaml
 
 # TODO: Add when needed:
 # - image-pull-secret.yaml  # For private registry access
