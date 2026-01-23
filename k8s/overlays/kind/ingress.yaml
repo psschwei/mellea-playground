@@ -1,0 +1,35 @@
+# Ingress resources for KinD local development
+# Routes traffic through NGINX Ingress Controller installed via scripts/install-ingress.sh
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mellea-ingress
+  namespace: mellea-system
+  labels:
+    app.kubernetes.io/part-of: mellea
+    app.kubernetes.io/component: ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          # Backend API routes - /api/* -> backend service
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: mellea-api
+                port:
+                  number: 8000
+          # Frontend routes - everything else goes to frontend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mellea-frontend
+                port:
+                  number: 80

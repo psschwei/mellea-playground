@@ -14,8 +14,11 @@ resources:
   # KinD-specific network policies (with registry access)
   - network-policies.yaml
 
-  # NodePort services for local access
+  # NodePort services for local access (fallback)
   - nodeport-services.yaml
+
+  # Ingress for HTTP access via localhost
+  - ingress.yaml
 
 patches:
   # Backend: add imagePullPolicy: Never and KinD registry settings
