@@ -29,7 +29,7 @@ import {
   Select,
   Progress,
 } from '@chakra-ui/react';
-import { FiSave, FiPlay, FiTrash2, FiCopy, FiGrid, FiCode, FiSquare, FiCheck, FiX } from 'react-icons/fi';
+import { FiSave, FiPlay, FiTrash2, FiCopy, FiGrid, FiCode, FiSquare, FiCheck, FiX, FiRefreshCw } from 'react-icons/fi';
 import { ReactFlowProvider, useReactFlow } from 'reactflow';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -351,6 +351,7 @@ interface BuilderHeaderProps {
   // Execution props
   onRun: () => void;
   onCancelRun: () => void;
+  onRetry?: () => void;
   isRunning: boolean;
   progress: {
     total: number;
@@ -371,6 +372,7 @@ function BuilderHeader({
   onToggleCodePreview,
   onRun,
   onCancelRun,
+  onRetry,
   isRunning,
   progress,
   runStatus,
@@ -451,15 +453,28 @@ function BuilderHeader({
               Cancel
             </Button>
           ) : (
-            <Button
-              leftIcon={<FiPlay />}
-              size="sm"
-              colorScheme="brand"
-              onClick={onRun}
-              isDisabled={!meta.id}
-            >
-              Run
-            </Button>
+            <>
+              {runStatus === 'failed' && onRetry && (
+                <Button
+                  leftIcon={<FiRefreshCw />}
+                  size="sm"
+                  colorScheme="orange"
+                  variant="outline"
+                  onClick={onRetry}
+                >
+                  Retry
+                </Button>
+              )}
+              <Button
+                leftIcon={<FiPlay />}
+                size="sm"
+                colorScheme="brand"
+                onClick={onRun}
+                isDisabled={!meta.id}
+              >
+                Run
+              </Button>
+            </>
           )}
         </HStack>
       </HStack>
@@ -674,6 +689,7 @@ function BuilderContent({ compositionId, onLoad, meta, setMeta }: BuilderContent
   const [showCodePreview, setShowCodePreview] = useState(false);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [lastRunStatus, setLastRunStatus] = useState<string | undefined>();
+  const [lastRunId, setLastRunId] = useState<string | undefined>();
   const [nodeStates, setNodeStates] = useState<Record<string, import('@/api/compositionRuns').NodeExecutionState>>({});
   const navigate = useNavigate();
   const toast = useToast();
@@ -690,6 +706,7 @@ function BuilderContent({ compositionId, onLoad, meta, setMeta }: BuilderContent
       // Store final node states
       setNodeStates(run.nodeStates);
       setLastRunStatus(run.status);
+      setLastRunId(run.id);
       if (run.status === 'succeeded') {
         toast({
           title: 'Execution completed',
@@ -820,6 +837,40 @@ function BuilderContent({ compositionId, onLoad, meta, setMeta }: BuilderContent
     } catch (error) {
       toast({
         title: 'Failed to cancel',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  // Handle retry (resume from failed node)
+  const handleRetryRun = async () => {
+    if (!lastRunId) {
+      toast({
+        title: 'Cannot retry',
+        description: 'No previous run to retry',
+        status: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+
+    try {
+      setLastRunStatus(undefined);
+      const result = await execution.resumeRun(lastRunId);
+      if (result) {
+        setLastRunId(result.run.id);
+        toast({
+          title: 'Resuming execution',
+          description: `Skipped ${result.skippedNodes.length} succeeded nodes, resuming from ${result.resumedFromNode}`,
+          status: 'info',
+          duration: 3000,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Failed to retry',
         description: error instanceof Error ? error.message : 'Unknown error',
         status: 'error',
         duration: 3000,
@@ -963,6 +1014,7 @@ function BuilderContent({ compositionId, onLoad, meta, setMeta }: BuilderContent
         onToggleCodePreview={() => setShowCodePreview(!showCodePreview)}
         onRun={handleRunClick}
         onCancelRun={handleCancelRun}
+        onRetry={handleRetryRun}
         isRunning={execution.isRunning}
         progress={execution.progress}
         runStatus={lastRunStatus}
