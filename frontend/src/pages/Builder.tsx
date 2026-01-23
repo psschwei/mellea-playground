@@ -43,6 +43,7 @@ import {
   defaultEdgeType,
   BuilderSidebar,
   CodePreviewPanel,
+  NodeLogsPanel,
   type MelleaNodeData,
   type CategoryEdgeData,
   type SidebarItem,
@@ -78,7 +79,12 @@ interface CompositionMeta {
 }
 
 // Node details sidebar - uses composition context
-function NodeDetailsSidebar() {
+interface NodeDetailsSidebarProps {
+  /** Node execution states from the current run (if any) */
+  nodeStates?: Record<string, import('@/api/compositionRuns').NodeExecutionState>;
+}
+
+function NodeDetailsSidebar({ nodeStates }: NodeDetailsSidebarProps) {
   const {
     selection,
     selectedNode,
@@ -91,6 +97,11 @@ function NodeDetailsSidebar() {
 
   const selectedCount = selection.nodes.length;
   const selectedEdgeCount = selection.edges.length;
+
+  // Get execution state for selected node
+  const selectedNodeState = selectedNode?.id && nodeStates
+    ? nodeStates[selectedNode.id]
+    : undefined;
 
   // No selection
   if (selectedCount === 0) {
@@ -237,6 +248,17 @@ function NodeDetailsSidebar() {
           {Math.round(selectedNode?.position.y ?? 0)}
         </Text>
       </Box>
+      {/* Node execution logs */}
+      {selectedNodeState && (
+        <>
+          <Divider />
+          <NodeLogsPanel
+            nodeState={selectedNodeState}
+            nodeLabel={selectedNode?.data?.label}
+            maxHeight="200px"
+          />
+        </>
+      )}
     </VStack>
   );
 }
@@ -652,6 +674,7 @@ function BuilderContent({ compositionId, onLoad, meta, setMeta }: BuilderContent
   const [showCodePreview, setShowCodePreview] = useState(false);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [lastRunStatus, setLastRunStatus] = useState<string | undefined>();
+  const [nodeStates, setNodeStates] = useState<Record<string, import('@/api/compositionRuns').NodeExecutionState>>({});
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -659,7 +682,13 @@ function BuilderContent({ compositionId, onLoad, meta, setMeta }: BuilderContent
   const execution = useCompositionExecution({
     onNodeStateChange: setNodeExecutionState,
     onResetStates: resetExecutionStates,
+    onProgress: (progress) => {
+      // Store node states for the logs panel
+      setNodeStates(progress.nodeStates);
+    },
     onComplete: (run: CompositionRun) => {
+      // Store final node states
+      setNodeStates(run.nodeStates);
       setLastRunStatus(run.status);
       if (run.status === 'succeeded') {
         toast({
@@ -943,7 +972,7 @@ function BuilderContent({ compositionId, onLoad, meta, setMeta }: BuilderContent
         <Box flex="1" bg="gray.50">
           <ConnectedCanvas nodeTypes={melleaNodeTypes} edgeTypes={melleaEdgeTypes} />
         </Box>
-        <NodeDetailsSidebar />
+        <NodeDetailsSidebar nodeStates={nodeStates} />
         {showCodePreview && (
           <CodePreviewPanel
             isExpanded={true}

@@ -50,6 +50,7 @@ class CodeGeneratorOptions:
     async_code: bool = True
     indent: str = "    "
     type_hints: bool = True
+    include_node_logging: bool = True  # Whether to include per-node logging calls
 
 
 def to_variable_name(node_id: str) -> str:
@@ -190,11 +191,12 @@ def generate_program_node_code(
     """Generate code for a program node."""
     data = get_node_data(node)
     var_name = to_variable_name(node["id"])
+    node_id = node["id"]
     lines: list[str] = []
     indent = options.indent
 
     # Get inputs from connected nodes
-    inputs = incoming.get(node["id"], [])
+    inputs = incoming.get(node_id, [])
     input_args: list[str] = []
 
     for inp in inputs:
@@ -204,13 +206,18 @@ def generate_program_node_code(
         input_args.append(f"{handle}={source_var}_output")
 
     if options.include_comments:
-        lines.append(f"{indent}# Program: {data.get('label', node['id'])}")
+        lines.append(f"{indent}# Program: {data.get('label', node_id)}")
         if data.get("programId"):
             lines.append(f"{indent}# Program ID: {data['programId']}")
 
+    # Add logging for node start
+    if options.include_node_logging:
+        label = data.get("label", node_id)
+        lines.append(f'{indent}log_node("{node_id}", "Starting program: {label}")')
+
     async_prefix = "await " if options.async_code else ""
     args_str = ", ".join(input_args)
-    program_id = data.get("programId") or data.get("label") or node["id"]
+    program_id = data.get("programId") or data.get("label") or node_id
 
     if args_str:
         lines.append(
@@ -220,6 +227,10 @@ def generate_program_node_code(
         lines.append(
             f'{indent}{var_name}_output = {async_prefix}run_program("{program_id}")'
         )
+
+    # Add logging for node completion
+    if options.include_node_logging:
+        lines.append(f'{indent}log_node("{node_id}", f"Program completed. Output: {{{var_name}_output}}")')
 
     return lines
 
@@ -232,11 +243,12 @@ def generate_model_node_code(
     """Generate code for a model node."""
     data = get_node_data(node)
     var_name = to_variable_name(node["id"])
+    node_id = node["id"]
     lines: list[str] = []
     indent = options.indent
 
     # Get input from connected node
-    inputs = incoming.get(node["id"], [])
+    inputs = incoming.get(node_id, [])
     input_expr = '""'
 
     if inputs:
@@ -244,13 +256,22 @@ def generate_model_node_code(
         input_expr = f"{to_variable_name(source)}_output"
 
     if options.include_comments:
-        lines.append(f"{indent}# Model: {data.get('label', node['id'])}")
+        lines.append(f"{indent}# Model: {data.get('label', node_id)}")
+
+    # Add logging for node start
+    if options.include_node_logging:
+        label = data.get("label", node_id)
+        lines.append(f'{indent}log_node("{node_id}", f"Invoking model: {label} with input: {{{input_expr}[:100]}}")')
 
     async_prefix = "await " if options.async_code else ""
-    model_id = data.get("modelId") or data.get("label") or node["id"]
+    model_id = data.get("modelId") or data.get("label") or node_id
     lines.append(
         f'{indent}{var_name}_output = {async_prefix}invoke_model("{model_id}", {input_expr})'
     )
+
+    # Add logging for node completion
+    if options.include_node_logging:
+        lines.append(f'{indent}log_node("{node_id}", f"Model response received. Length: {{len(str({var_name}_output))}}")')
 
     return lines
 
@@ -446,6 +467,8 @@ def generate_code(
     code_lines.append("")
     code_lines.append("# Mellea runtime imports")
     code_lines.append("from mellea.runtime import run_program, invoke_model")
+    if opts.include_node_logging:
+        code_lines.append("from mellea_api.runtime import log_node, configure_runtime")
     code_lines.append("")
 
     # Build input parameters for function signature
@@ -529,6 +552,10 @@ def generate_code(
     code_lines.append("")
     if opts.async_code:
         code_lines.append('if __name__ == "__main__":')
+        if opts.include_node_logging:
+            code_lines.append(f"{opts.indent}# Configure runtime for node logging")
+            code_lines.append(f"{opts.indent}configure_runtime()")
+            code_lines.append("")
         code_lines.append(f"{opts.indent}# Example usage")
         if input_param_list:
             code_lines.append(f"{opts.indent}# result = asyncio.run(run_workflow(...))")
@@ -537,6 +564,10 @@ def generate_code(
             code_lines.append(f'{opts.indent}print(f"Result: {{result}}")')
     else:
         code_lines.append('if __name__ == "__main__":')
+        if opts.include_node_logging:
+            code_lines.append(f"{opts.indent}# Configure runtime for node logging")
+            code_lines.append(f"{opts.indent}configure_runtime()")
+            code_lines.append("")
         code_lines.append(f"{opts.indent}# Example usage")
         if input_param_list:
             code_lines.append(f"{opts.indent}# result = run_workflow(...)")

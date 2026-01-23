@@ -90,3 +90,4 @@ export {
   type LayoutDirection,
   type AutoLayoutOptions,
 } from './autoLayout';
+export { NodeLogsPanel, type NodeLogsPanelProps } from './NodeLogsPanel';

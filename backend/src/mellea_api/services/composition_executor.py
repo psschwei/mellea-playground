@@ -372,6 +372,41 @@ class CompositionRunService:
         logger.debug(f"Node {node_id} in run {run_id} transitioned to {status.value}")
         return updated
 
+    def append_node_log(
+        self,
+        run_id: str,
+        node_id: str,
+        message: str,
+    ) -> CompositionRun:
+        """Append a log message to a specific node's execution state.
+
+        Args:
+            run_id: Run's unique identifier
+            node_id: Node's unique identifier
+            message: Log message to append
+
+        Returns:
+            Updated CompositionRun
+        """
+        run = self.run_store.get_by_id(run_id)
+        if run is None:
+            raise CompositionRunNotFoundError(f"Composition run not found: {run_id}")
+
+        # Get or create node state
+        if node_id not in run.node_states:
+            raise CompositionRunNotFoundError(
+                f"Node {node_id} not found in composition run {run_id}"
+            )
+
+        run.node_states[node_id].append_log(message)
+
+        updated = self.run_store.update(run_id, run)
+        if updated is None:
+            raise CompositionRunNotFoundError(f"Composition run not found: {run_id}")
+
+        logger.debug(f"Appended log to node {node_id} in run {run_id}: {message[:50]}...")
+        return updated
+
     def delete_run(self, run_id: str) -> bool:
         """Delete a composition run by ID.
 

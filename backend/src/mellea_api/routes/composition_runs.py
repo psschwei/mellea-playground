@@ -113,6 +113,13 @@ class ProgressResponse(BaseModel):
         populate_by_name = True
 
 
+class AppendNodeLogRequest(BaseModel):
+    """Request body for appending a log message to a node."""
+
+    message: str = Field(description="Log message to append")
+    timestamp: str | None = Field(default=None, description="Optional timestamp for the log entry")
+
+
 # =============================================================================
 # Routes
 # =============================================================================
@@ -258,6 +265,39 @@ async def get_composition_run_progress(
         currentNodeId=run.current_node_id,
         nodeStates=run.node_states,
     )
+
+
+@router.post("/{run_id}/nodes/{node_id}/logs")
+async def append_node_log(
+    run_id: str,
+    node_id: str,
+    request: AppendNodeLogRequest,
+    executor: CompositionExecutorDep,
+) -> dict[str, bool]:
+    """Append a log message to a specific node's execution state.
+
+    This endpoint is called by the composition runner during execution to
+    emit node-level logs that can be viewed in the UI for debugging.
+
+    Note: This endpoint does not require authentication as it's called
+    from within the K8s job which doesn't have user credentials.
+    The run_id serves as authorization.
+    """
+    try:
+        # Format message with optional timestamp
+        if request.timestamp:
+            formatted_message = f"[{request.timestamp}] {request.message}"
+        else:
+            formatted_message = request.message
+
+        executor.run_service.append_node_log(run_id, node_id, formatted_message)
+        return {"success": True}
+
+    except CompositionRunNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
 
 
 @router.post("/{run_id}/cancel", response_model=CompositionRunResponse)
