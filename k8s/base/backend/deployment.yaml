@@ -37,7 +37,7 @@ spec:
             runAsUser: 0
       containers:
         - name: api
-          image: mellea-backend:latest
+          image: quay.io/psschwei/mellea-backend:latest
           ports:
             - containerPort: 8000
               name: http

@@ -20,6 +20,15 @@ resources:
   # Ingress for HTTP access via localhost
   - ingress.yaml
 
+# Override images for local development (loaded directly into KinD)
+images:
+  - name: quay.io/psschwei/mellea-backend
+    newName: mellea-backend
+    newTag: latest
+  - name: quay.io/psschwei/mellea-frontend
+    newName: mellea-frontend
+    newTag: latest
+
 patches:
   # Backend: add imagePullPolicy: Never and KinD registry settings
   - path: backend-patch.yaml

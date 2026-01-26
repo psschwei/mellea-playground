@@ -12,5 +12,6 @@ resources:
 patchesStrategicMerge:
   - backend-patch.yaml
   - frontend-patch.yaml
-  # Uncomment to enable private registry authentication:
-  # - image-pull-secret-patch.yaml
+  # Enable private registry authentication for Quay.io
+  # Prerequisite: Create registry-credentials secret (see image-pull-secret-patch.yaml)
+  - image-pull-secret-patch.yaml

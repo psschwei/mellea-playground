@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: mellea-frontend:latest
+          image: quay.io/psschwei/mellea-frontend:latest
           ports:
             - containerPort: 80
               name: http
