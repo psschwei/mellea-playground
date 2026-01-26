@@ -12,7 +12,9 @@ from mellea_api.models.credential import Credential, CredentialUpdate
 from mellea_api.services.credentials import (
     CredentialNotFoundError,
     CredentialService,
+    CredentialValidationError,
     EncryptedFileBackend,
+    validate_secret_data,
 )
 
 
@@ -394,3 +396,210 @@ class TestCredentialModel:
             expiresAt=datetime.utcnow() - timedelta(days=1),
         )
         assert cred.is_expired is True
+
+
+class TestProviderValidation:
+    """Tests for provider-specific secret_data validation."""
+
+    def test_openai_valid(self):
+        """Test valid OpenAI credentials."""
+        validate_secret_data(
+            ModelProvider.OPENAI,
+            {"api_key": "sk-test"},
+        )
+        # Should not raise
+
+    def test_openai_with_org_id(self):
+        """Test OpenAI credentials with optional organization_id."""
+        validate_secret_data(
+            ModelProvider.OPENAI,
+            {"api_key": "sk-test", "organization_id": "org-123"},
+        )
+        # Should not raise
+
+    def test_openai_missing_api_key(self):
+        """Test OpenAI credentials missing required api_key."""
+        with pytest.raises(CredentialValidationError) as exc_info:
+            validate_secret_data(
+                ModelProvider.OPENAI,
+                {"organization_id": "org-123"},
+            )
+        assert "api_key" in exc_info.value.missing_keys
+
+    def test_anthropic_valid(self):
+        """Test valid Anthropic credentials."""
+        validate_secret_data(
+            ModelProvider.ANTHROPIC,
+            {"api_key": "sk-ant-test"},
+        )
+        # Should not raise
+
+    def test_anthropic_missing_api_key(self):
+        """Test Anthropic credentials missing required api_key."""
+        with pytest.raises(CredentialValidationError) as exc_info:
+            validate_secret_data(
+                ModelProvider.ANTHROPIC,
+                {"other_key": "value"},
+            )
+        assert "api_key" in exc_info.value.missing_keys
+
+    def test_azure_api_key_mode(self):
+        """Test Azure credentials with API key mode."""
+        validate_secret_data(
+            ModelProvider.AZURE,
+            {"api_key": "test-key", "endpoint": "https://test.openai.azure.com"},
+        )
+        # Should not raise
+
+    def test_azure_api_key_mode_with_version(self):
+        """Test Azure credentials with API key mode and optional api_version."""
+        validate_secret_data(
+            ModelProvider.AZURE,
+            {
+                "api_key": "test-key",
+                "endpoint": "https://test.openai.azure.com",
+                "api_version": "2024-02-01",
+            },
+        )
+        # Should not raise
+
+    def test_azure_oauth_mode(self):
+        """Test Azure credentials with OAuth mode."""
+        validate_secret_data(
+            ModelProvider.AZURE,
+            {
+                "tenant_id": "tenant-123",
+                "client_id": "client-456",
+                "client_secret": "secret-789",
+                "endpoint": "https://test.openai.azure.com",
+            },
+        )
+        # Should not raise
+
+    def test_azure_missing_both_modes(self):
+        """Test Azure credentials missing requirements for both modes."""
+        with pytest.raises(CredentialValidationError) as exc_info:
+            validate_secret_data(
+                ModelProvider.AZURE,
+                {"endpoint": "https://test.openai.azure.com"},
+            )
+        assert "api_key" in exc_info.value.message
+        assert "tenant_id" in exc_info.value.message
+
+    def test_ollama_no_auth(self):
+        """Test Ollama credentials with no authentication (typical)."""
+        validate_secret_data(
+            ModelProvider.OLLAMA,
+            {"some_config": "value"},
+        )
+        # Should not raise - Ollama has no required keys
+
+    def test_ollama_with_api_key(self):
+        """Test Ollama credentials with optional api_key."""
+        validate_secret_data(
+            ModelProvider.OLLAMA,
+            {"api_key": "optional-key"},
+        )
+        # Should not raise
+
+    def test_custom_provider_no_validation(self):
+        """Test custom provider has no strict validation."""
+        validate_secret_data(
+            ModelProvider.CUSTOM,
+            {"anything": "goes", "custom_field": "value"},
+        )
+        # Should not raise
+
+    def test_none_provider_no_validation(self):
+        """Test None provider skips validation."""
+        validate_secret_data(
+            None,
+            {"any": "data"},
+        )
+        # Should not raise
+
+    def test_string_provider(self):
+        """Test validation works with string provider value."""
+        validate_secret_data(
+            "openai",
+            {"api_key": "sk-test"},
+        )
+        # Should not raise
+
+    def test_empty_secret_data(self):
+        """Test empty secret_data raises error."""
+        with pytest.raises(CredentialValidationError) as exc_info:
+            validate_secret_data(
+                ModelProvider.OPENAI,
+                {},
+            )
+        assert "cannot be empty" in exc_info.value.message
+
+    def test_non_api_key_type_skips_validation(self):
+        """Test non-API_KEY credential types skip provider validation."""
+        # This would fail for OpenAI if validated, but REGISTRY type skips it
+        validate_secret_data(
+            ModelProvider.OPENAI,
+            {"username": "user", "password": "pass"},
+            credential_type=CredentialType.REGISTRY,
+        )
+        # Should not raise
+
+
+class TestServiceValidation:
+    """Tests for validation integration in CredentialService."""
+
+    def test_create_credential_validates(self, credential_service: CredentialService):
+        """Test that create_credential validates secret_data."""
+        with pytest.raises(CredentialValidationError):
+            credential_service.create_credential(
+                name="Invalid OpenAI",
+                credential_type=CredentialType.API_KEY,
+                secret_data={"wrong_key": "value"},
+                provider=ModelProvider.OPENAI,
+            )
+
+    def test_create_credential_valid(self, credential_service: CredentialService):
+        """Test creating credential with valid secret_data."""
+        cred = credential_service.create_credential(
+            name="Valid OpenAI",
+            credential_type=CredentialType.API_KEY,
+            secret_data={"api_key": "sk-test"},
+            provider=ModelProvider.OPENAI,
+        )
+        assert cred.name == "Valid OpenAI"
+
+    def test_update_credential_validates(self, credential_service: CredentialService):
+        """Test that update_credential validates new secret_data."""
+        # Create valid credential first
+        cred = credential_service.create_credential(
+            name="Test",
+            credential_type=CredentialType.API_KEY,
+            secret_data={"api_key": "sk-test"},
+            provider=ModelProvider.OPENAI,
+        )
+
+        # Try to update with invalid secret_data
+        with pytest.raises(CredentialValidationError):
+            credential_service.update_credential(
+                credential_id=cred.id,
+                secret_data={"wrong_key": "value"},
+            )
+
+    def test_update_credential_metadata_no_validation(
+        self, credential_service: CredentialService
+    ):
+        """Test updating only metadata doesn't trigger validation."""
+        cred = credential_service.create_credential(
+            name="Test",
+            credential_type=CredentialType.API_KEY,
+            secret_data={"api_key": "sk-test"},
+            provider=ModelProvider.OPENAI,
+        )
+
+        # Update only name - should not validate secret_data
+        updated = credential_service.update_credential(
+            credential_id=cred.id,
+            name="New Name",
+        )
+        assert updated.name == "New Name"

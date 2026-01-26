@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from mellea_api.core.config import Settings, get_settings
-from mellea_api.models.common import CredentialType
+from mellea_api.models.common import CredentialType, ModelProvider
 from mellea_api.models.credential import Credential, CredentialUpdate
 
 if TYPE_CHECKING:
@@ -32,6 +32,141 @@ class CredentialNotFoundError(Exception):
     """Raised when a credential is not found."""
 
     pass
+
+
+class CredentialValidationError(Exception):
+    """Raised when credential validation fails."""
+
+    def __init__(self, message: str, missing_keys: list[str] | None = None) -> None:
+        """Initialize validation error.
+
+        Args:
+            message: Error message
+            missing_keys: List of missing required keys
+        """
+        super().__init__(message)
+        self.message = message
+        self.missing_keys = missing_keys or []
+
+
+# Provider-specific validation rules
+# Each provider maps to: (required_keys, optional_keys)
+PROVIDER_VALIDATION_RULES: dict[str, tuple[set[str], set[str]]] = {
+    ModelProvider.OPENAI.value: ({"api_key"}, {"organization_id"}),
+    ModelProvider.ANTHROPIC.value: ({"api_key"}, set()),
+    ModelProvider.OLLAMA.value: (set(), {"api_key"}),
+    ModelProvider.CUSTOM.value: (set(), set()),  # No strict validation for custom
+}
+
+# Azure has two authentication modes: API key or OAuth
+AZURE_API_KEY_RULES: tuple[set[str], set[str]] = (
+    {"api_key", "endpoint"},
+    {"api_version"},
+)
+AZURE_OAUTH_RULES: tuple[set[str], set[str]] = (
+    {"tenant_id", "client_id", "client_secret", "endpoint"},
+    {"api_version"},
+)
+
+
+def validate_secret_data(
+    provider: ModelProvider | str | None,
+    secret_data: dict[str, str],
+    credential_type: CredentialType = CredentialType.API_KEY,
+) -> None:
+    """Validate secret_data against provider-specific rules.
+
+    Args:
+        provider: The LLM provider (openai, anthropic, etc.)
+        secret_data: The secret key-value pairs to validate
+        credential_type: The type of credential
+
+    Raises:
+        CredentialValidationError: If required keys are missing or validation fails
+    """
+    if not secret_data:
+        raise CredentialValidationError("secret_data cannot be empty")
+
+    # Only validate API_KEY credentials with known providers
+    if credential_type != CredentialType.API_KEY:
+        return
+
+    if provider is None:
+        return  # No provider-specific validation
+
+    # Normalize provider to string for lookup
+    provider_str = provider.value if isinstance(provider, ModelProvider) else provider
+
+    # Handle Azure separately due to two auth modes
+    if provider_str == ModelProvider.AZURE.value:
+        _validate_azure_secret_data(secret_data)
+        return
+
+    # Get validation rules for provider
+    rules = PROVIDER_VALIDATION_RULES.get(provider_str)
+    if rules is None:
+        # Unknown provider, skip validation
+        return
+
+    required_keys, optional_keys = rules
+    provided_keys = set(secret_data.keys())
+
+    # Check for missing required keys
+    missing_keys = required_keys - provided_keys
+    if missing_keys:
+        raise CredentialValidationError(
+            f"Missing required keys for {provider_str}: {sorted(missing_keys)}",
+            missing_keys=sorted(missing_keys),
+        )
+
+    # Warn about unexpected keys (but don't fail)
+    allowed_keys = required_keys | optional_keys
+    if allowed_keys:  # Only check if there are defined allowed keys
+        unexpected_keys = provided_keys - allowed_keys
+        if unexpected_keys:
+            logger.warning(
+                f"Unexpected keys in secret_data for {provider_str}: {unexpected_keys}"
+            )
+
+
+def _validate_azure_secret_data(secret_data: dict[str, str]) -> None:
+    """Validate Azure secret_data which supports two auth modes.
+
+    Azure supports:
+    1. API Key auth: api_key + endpoint (+ optional api_version)
+    2. OAuth auth: tenant_id + client_id + client_secret + endpoint (+ optional api_version)
+
+    Args:
+        secret_data: The secret key-value pairs to validate
+
+    Raises:
+        CredentialValidationError: If neither auth mode requirements are met
+    """
+    provided_keys = set(secret_data.keys())
+
+    # Check API key mode
+    api_key_required, api_key_optional = AZURE_API_KEY_RULES
+    api_key_missing = api_key_required - provided_keys
+
+    # Check OAuth mode
+    oauth_required, oauth_optional = AZURE_OAUTH_RULES
+    oauth_missing = oauth_required - provided_keys
+
+    # If either mode is satisfied, validation passes
+    if not api_key_missing:
+        return
+    if not oauth_missing:
+        return
+
+    # Neither mode satisfied - provide helpful error
+    raise CredentialValidationError(
+        "Azure credentials require either: "
+        "(api_key + endpoint) for API key auth, or "
+        "(tenant_id + client_id + client_secret + endpoint) for OAuth auth. "
+        f"Missing for API key mode: {sorted(api_key_missing)}. "
+        f"Missing for OAuth mode: {sorted(oauth_missing)}.",
+        missing_keys=sorted(api_key_missing),
+    )
 
 
 class CredentialBackend(ABC):
@@ -674,7 +809,13 @@ class CredentialService:
 
         Returns:
             The created Credential
+
+        Raises:
+            CredentialValidationError: If secret_data fails provider validation
         """
+        # Validate secret_data against provider requirements
+        validate_secret_data(provider, secret_data, credential_type)
+
         credential = Credential(
             name=name,
             type=credential_type,
@@ -794,7 +935,15 @@ class CredentialService:
 
         Raises:
             CredentialNotFoundError: If credential doesn't exist
+            CredentialValidationError: If secret_data fails provider validation
         """
+        # If updating secret_data, validate against existing credential's provider
+        if secret_data is not None:
+            existing = self.backend.get(credential_id)
+            if existing is None:
+                raise CredentialNotFoundError(f"Credential not found: {credential_id}")
+            validate_secret_data(existing.provider, secret_data, existing.type)
+
         updates = CredentialUpdate(
             name=name,
             description=description,

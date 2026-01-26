@@ -14,6 +14,7 @@ from mellea_api.models.credential import (
 from mellea_api.services.credentials import (
     CredentialNotFoundError,
     CredentialService,
+    CredentialValidationError,
     get_credential_service,
 )
 
@@ -32,17 +33,33 @@ async def create_credential(
 
     Securely stores the provided secret data with encryption at rest.
     The secret data is never returned in API responses.
+
+    Validates secret_data against provider-specific requirements:
+    - OpenAI: requires api_key, optional organization_id
+    - Anthropic: requires api_key
+    - Azure: requires (api_key + endpoint) or (tenant_id + client_id + client_secret + endpoint)
+    - Ollama: optional api_key
+    - Custom: no validation
     """
-    credential = credential_service.create_credential(
-        name=credential_data.name,
-        credential_type=credential_data.type,
-        secret_data=credential_data.secret_data,
-        provider=credential_data.provider,
-        owner_id=current_user.id,
-        description=credential_data.description,
-        tags=credential_data.tags,
-        expires_at=credential_data.expires_at,
-    )
+    try:
+        credential = credential_service.create_credential(
+            name=credential_data.name,
+            credential_type=credential_data.type,
+            secret_data=credential_data.secret_data,
+            provider=credential_data.provider,
+            owner_id=current_user.id,
+            description=credential_data.description,
+            tags=credential_data.tags,
+            expires_at=credential_data.expires_at,
+        )
+    except CredentialValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": e.message,
+                "missing_keys": e.missing_keys,
+            },
+        ) from e
 
     return CredentialResponse.from_credential(credential)
 
@@ -108,6 +125,7 @@ async def update_credential(
     """Update a credential.
 
     Can update metadata and/or rotate the secret data.
+    When updating secret_data, validates against provider-specific requirements.
     """
     # Check existence and ownership first
     credential = credential_service.get_credential(credential_id)
@@ -138,6 +156,14 @@ async def update_credential(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
+        ) from e
+    except CredentialValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": e.message,
+                "missing_keys": e.missing_keys,
+            },
         ) from e
 
 
