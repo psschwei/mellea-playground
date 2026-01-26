@@ -12,6 +12,5 @@ resources:
 patchesStrategicMerge:
   - backend-patch.yaml
   - frontend-patch.yaml
-
-# TODO: Add when needed:
-# - image-pull-secret.yaml  # For private registry access
+  # Uncomment to enable private registry authentication:
+  # - image-pull-secret-patch.yaml

@@ -25,5 +25,8 @@ resources:
   # Frontend
   - frontend/deployment.yaml
 
+  # Secret templates (documentation only - create secrets via kubectl)
+  # See: secrets/registry-credentials.yaml for instructions
+
 commonLabels:
   app.kubernetes.io/managed-by: kustomize
