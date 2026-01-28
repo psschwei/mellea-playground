@@ -9,6 +9,8 @@ Documentation for the Mellea Playground program execution platform.
 | [Quickstart](./quickstart.md) | Get started in minutes |
 | [Program Execution](./program-execution.md) | Detailed guide to running programs |
 | [API Reference](./api-reference.md) | REST API documentation |
+| [Deploy to OpenShift](./deploy-openshift.md) | OpenShift deployment guide |
+| [Secrets Storage](./secrets-storage.md) | Credentials and secrets management |
 
 ## Architecture Overview
 
