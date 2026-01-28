@@ -21,7 +21,7 @@ spec:
         app.kubernetes.io/component: api
         app.kubernetes.io/name: mellea-api
     spec:
-      serviceAccountName: default
+      serviceAccountName: mellea-api
       initContainers:
         - name: init-permissions
           image: busybox:1.36
@@ -41,6 +41,10 @@ spec:
           ports:
             - containerPort: 8000
               name: http
+          envFrom:
+            - secretRef:
+                name: mellea-api-secrets
+                optional: true  # Allow deployment without secret (uses defaults)
           env:
             - name: MELLEA_ENVIRONMENT
               value: "development"
@@ -54,6 +58,8 @@ spec:
               value: "false"
             - name: MELLEA_BUILD_BACKEND
               value: "kaniko"
+            - name: MELLEA_CREDENTIALS_NAMESPACE
+              value: "mellea-credentials"
           volumeMounts:
             - name: assets
               mountPath: /app/data/metadata

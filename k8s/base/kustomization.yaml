@@ -12,8 +12,11 @@ resources:
   - rbac/run-service-account.yaml
   - rbac/run-manager-binding.yaml
   - rbac/build-service-account.yaml
+  - rbac/api-service-account.yaml
   - rbac/credential-reader-role.yaml
   - rbac/credential-reader-binding.yaml
+  - rbac/credential-manager-role.yaml
+  - rbac/api-credential-binding.yaml
 
   # Redis
   - redis/redis-config.yaml

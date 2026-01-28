@@ -462,16 +462,25 @@ class EncryptedFileBackend(CredentialBackend):
 class K8sSecretsBackend(CredentialBackend):
     """Kubernetes Secrets backend for production deployments.
 
-    Stores credentials as Kubernetes Secrets in the mellea-credentials
-    namespace. Provides native K8s integration with RBAC and audit logging.
+    Stores credentials as Kubernetes Secrets in a configurable namespace.
+    Provides native K8s integration with RBAC and audit logging.
+
+    The namespace can be configured via MELLEA_CREDENTIALS_NAMESPACE
+    environment variable (defaults to "mellea-credentials").
     """
 
-    NAMESPACE = "mellea-credentials"
     LABEL_SELECTOR = "app.kubernetes.io/managed-by=mellea-credentials"
 
-    def __init__(self) -> None:
-        """Initialize the K8s Secrets backend."""
+    def __init__(self, settings: Settings | None = None) -> None:
+        """Initialize the K8s Secrets backend.
+
+        Args:
+            settings: Application settings (optional, uses global if not provided)
+        """
         from kubernetes import client, config
+
+        self._settings = settings or get_settings()
+        self._namespace = self._settings.credentials_namespace
 
         try:
             config.load_incluster_config()
@@ -485,6 +494,7 @@ class K8sSecretsBackend(CredentialBackend):
 
         self._core_api = client.CoreV1Api()
         self._lock = threading.RLock()
+        logger.info(f"K8s credentials backend using namespace: {self._namespace}")
 
     def _secret_name(self, credential_id: str) -> str:
         """Generate K8s Secret name from credential ID."""
@@ -514,7 +524,7 @@ class K8sSecretsBackend(CredentialBackend):
             kind="Secret",
             metadata=client.V1ObjectMeta(
                 name=self._secret_name(credential.id),
-                namespace=self.NAMESPACE,
+                namespace=self._namespace,
                 labels={
                     "app.kubernetes.io/managed-by": "mellea-credentials",
                     "mellea.io/credential-id": credential.id,
@@ -546,7 +556,7 @@ class K8sSecretsBackend(CredentialBackend):
 
             try:
                 self._core_api.create_namespaced_secret(
-                    namespace=self.NAMESPACE,
+                    namespace=self._namespace,
                     body=secret,
                 )
                 logger.info(f"Created K8s Secret for credential {credential.id}")
@@ -563,7 +573,7 @@ class K8sSecretsBackend(CredentialBackend):
             try:
                 secret = self._core_api.read_namespaced_secret(
                     name=self._secret_name(credential_id),
-                    namespace=self.NAMESPACE,
+                    namespace=self._namespace,
                 )
                 return self._secret_to_credential(secret)
             except ApiException as e:
@@ -579,7 +589,7 @@ class K8sSecretsBackend(CredentialBackend):
             try:
                 secret = self._core_api.read_namespaced_secret(
                     name=self._secret_name(credential_id),
-                    namespace=self.NAMESPACE,
+                    namespace=self._namespace,
                 )
                 if secret.data is None:
                     return {}
@@ -606,7 +616,7 @@ class K8sSecretsBackend(CredentialBackend):
                 label_selector += f",mellea.io/credential-type={credential_type.value}"
 
             secrets = self._core_api.list_namespaced_secret(
-                namespace=self.NAMESPACE,
+                namespace=self._namespace,
                 label_selector=label_selector,
             )
 
@@ -635,7 +645,7 @@ class K8sSecretsBackend(CredentialBackend):
                 # Get existing secret
                 secret = self._core_api.read_namespaced_secret(
                     name=self._secret_name(credential_id),
-                    namespace=self.NAMESPACE,
+                    namespace=self._namespace,
                 )
                 credential = self._secret_to_credential(secret)
 
@@ -664,7 +674,7 @@ class K8sSecretsBackend(CredentialBackend):
 
                 self._core_api.replace_namespaced_secret(
                     name=self._secret_name(credential_id),
-                    namespace=self.NAMESPACE,
+                    namespace=self._namespace,
                     body=secret,
                 )
 
@@ -684,7 +694,7 @@ class K8sSecretsBackend(CredentialBackend):
             try:
                 self._core_api.delete_namespaced_secret(
                     name=self._secret_name(credential_id),
-                    namespace=self.NAMESPACE,
+                    namespace=self._namespace,
                 )
                 logger.info(f"Deleted K8s Secret for credential {credential_id}")
                 return True
@@ -701,7 +711,7 @@ class K8sSecretsBackend(CredentialBackend):
             try:
                 secret = self._core_api.read_namespaced_secret(
                     name=self._secret_name(credential_id),
-                    namespace=self.NAMESPACE,
+                    namespace=self._namespace,
                 )
                 credential = self._secret_to_credential(secret)
                 credential.last_accessed_at = datetime.utcnow()
@@ -712,7 +722,7 @@ class K8sSecretsBackend(CredentialBackend):
 
                 self._core_api.replace_namespaced_secret(
                     name=self._secret_name(credential_id),
-                    namespace=self.NAMESPACE,
+                    namespace=self._namespace,
                     body=secret,
                 )
             except ApiException:
@@ -771,7 +781,7 @@ class CredentialService:
         if self._backend is None:
             if _is_k8s_environment():
                 try:
-                    self._backend = K8sSecretsBackend()
+                    self._backend = K8sSecretsBackend(self.settings)
                     logger.info("Using K8s Secrets backend for credentials")
                 except RuntimeError:
                     logger.warning(
