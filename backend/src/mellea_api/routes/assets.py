@@ -644,13 +644,14 @@ async def update_program_dependencies(
     new_packages = {(p.name.lower(), p.version) for p in request.packages}
     build_required = old_packages != new_packages
 
-    # Update dependencies
-    program.dependencies = DependencySpec(
+    # Update dependencies - use model_construct to bypass validation since we know values are valid
+    new_deps = DependencySpec.model_construct(
         source=DependencySource.MANUAL,
         packages=request.packages,
         python_version=program.dependencies.python_version,
         lockfile_hash=None,  # Clear lockfile hash since packages changed
     )
+    program.dependencies = new_deps
 
     # Mark image as needing rebuild if dependencies changed
     if build_required and program.image_build_status == ImageBuildStatus.READY:
@@ -670,10 +671,10 @@ async def update_program_dependencies(
         build_required,
     )
 
-    return UpdateDependenciesResponse(
-        programId=program_id,
+    return UpdateDependenciesResponse.model_construct(
+        program_id=program_id,
         dependencies=updated.dependencies,
-        buildRequired=build_required,
+        build_required=build_required,
     )
 
 
