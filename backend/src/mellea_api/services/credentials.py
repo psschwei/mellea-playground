@@ -11,7 +11,7 @@ import os
 import re
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -483,7 +483,7 @@ async def test_anthropic_connection(api_key: str) -> ConnectionTestResult:
 
 
 # Registry of connection test functions per provider
-CONNECTION_TESTERS: dict[str, Callable[..., ConnectionTestResult]] = {
+CONNECTION_TESTERS: dict[str, Callable[..., Awaitable[ConnectionTestResult]]] = {
     ModelProvider.OPENAI.value: test_openai_connection,
     ModelProvider.ANTHROPIC.value: test_anthropic_connection,
 }
