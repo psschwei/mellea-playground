@@ -24,6 +24,7 @@ from mellea_api.routes import (
     llm_metrics_router,
     retention_router,
     runs_router,
+    sharing_router,
 )
 from mellea_api.services.auth import get_auth_service
 from mellea_api.services.idle_timeout import get_idle_timeout_controller
@@ -119,6 +120,7 @@ def create_app() -> FastAPI:
     app.include_router(retention_router)
     app.include_router(llm_metrics_router)
     app.include_router(controller_router)
+    app.include_router(sharing_router)
 
     return app
 
