@@ -20,7 +20,7 @@ import {
 } from '@chakra-ui/react';
 import { useRef } from 'react';
 import { FiPlus, FiKey } from 'react-icons/fi';
-import { CredentialCard, CreateCredentialModal } from '@/components/Credentials';
+import { CredentialCard, CreateCredentialModal, EditCredentialModal } from '@/components/Credentials';
 import { credentialsApi } from '@/api';
 import type { Credential } from '@/types';
 
@@ -28,12 +28,18 @@ export function CredentialsPage() {
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingCredential, setDeletingCredential] = useState<Credential | null>(null);
+  const [editingCredential, setEditingCredential] = useState<Credential | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const {
     isOpen: isDeleteOpen,
     onOpen: onDeleteOpen,
     onClose: onDeleteClose,
+  } = useDisclosure();
+  const {
+    isOpen: isEditOpen,
+    onOpen: onEditOpen,
+    onClose: onEditClose,
   } = useDisclosure();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const toast = useToast();
@@ -63,13 +69,20 @@ export function CredentialsPage() {
     setCredentials((prev) => [credential, ...prev]);
   };
 
-  const handleEdit = (_credential: Credential) => {
-    toast({
-      title: 'Edit credential',
-      description: 'Credential editing coming soon',
-      status: 'info',
-      duration: 3000,
-    });
+  const handleEdit = (credential: Credential) => {
+    setEditingCredential(credential);
+    onEditOpen();
+  };
+
+  const handleEditClose = () => {
+    setEditingCredential(null);
+    onEditClose();
+  };
+
+  const handleCredentialUpdated = (updatedCredential: Credential) => {
+    setCredentials((prev) =>
+      prev.map((c) => (c.id === updatedCredential.id ? updatedCredential : c))
+    );
   };
 
   const handleDeleteClick = (credential: Credential) => {
@@ -161,6 +174,15 @@ export function CredentialsPage() {
         onClose={onClose}
         onCreated={handleCredentialCreated}
       />
+
+      {editingCredential && (
+        <EditCredentialModal
+          isOpen={isEditOpen}
+          onClose={handleEditClose}
+          credential={editingCredential}
+          onUpdated={handleCredentialUpdated}
+        />
+      )}
 
       <AlertDialog
         isOpen={isDeleteOpen}

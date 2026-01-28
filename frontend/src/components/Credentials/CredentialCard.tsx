@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Card,
   CardBody,
@@ -9,8 +10,11 @@ import {
   Icon,
   Badge,
   useColorModeValue,
+  useToast,
+  Spinner,
 } from '@chakra-ui/react';
-import { FiKey, FiEdit2, FiTrash2 } from 'react-icons/fi';
+import { FiKey, FiEdit2, FiTrash2, FiCheckCircle } from 'react-icons/fi';
+import { credentialsApi } from '@/api';
 import type { Credential, CredentialType, ModelProvider } from '@/types';
 
 interface CredentialCardProps {
@@ -52,8 +56,11 @@ const providerLabels: Record<ModelProvider, string> = {
 };
 
 export function CredentialCard({ credential, onEdit, onDelete }: CredentialCardProps) {
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<boolean | null>(null);
   const bgHover = useColorModeValue('gray.50', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
+  const toast = useToast();
 
   const typeLabel = typeLabels[credential.type] || credential.type;
   const providerLabel = credential.provider
@@ -62,6 +69,35 @@ export function CredentialCard({ credential, onEdit, onDelete }: CredentialCardP
 
   const statusColor = credential.isExpired ? 'red' : 'green';
   const statusLabel = credential.isExpired ? 'Expired' : 'Active';
+
+  const handleValidate = async () => {
+    setIsValidating(true);
+    setValidationResult(null);
+    try {
+      const result = await credentialsApi.validate(credential.id);
+      setValidationResult(result.valid);
+      toast({
+        title: result.valid ? 'Credential valid' : 'Credential invalid',
+        description: result.valid
+          ? `${credential.name} is valid and not expired.`
+          : `${credential.name} is invalid or expired.`,
+        status: result.valid ? 'success' : 'warning',
+        duration: 3000,
+      });
+    } catch (error: unknown) {
+      setValidationResult(false);
+      const message =
+        error instanceof Error ? error.message : 'Failed to validate credential';
+      toast({
+        title: 'Validation failed',
+        description: message,
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
 
   return (
     <Card
@@ -86,6 +122,14 @@ export function CredentialCard({ credential, onEdit, onDelete }: CredentialCardP
                 <Badge colorScheme={statusColor} variant="subtle">
                   {statusLabel}
                 </Badge>
+                {validationResult !== null && (
+                  <Badge
+                    colorScheme={validationResult ? 'green' : 'red'}
+                    variant="solid"
+                  >
+                    {validationResult ? 'Validated' : 'Invalid'}
+                  </Badge>
+                )}
                 {credential.tags?.slice(0, 3).map((tag) => (
                   <Badge key={tag} variant="outline" colorScheme="gray">
                     {tag}
@@ -101,6 +145,15 @@ export function CredentialCard({ credential, onEdit, onDelete }: CredentialCardP
           </HStack>
 
           <HStack spacing={2}>
+            <Button
+              size="sm"
+              variant="ghost"
+              leftIcon={isValidating ? <Spinner size="xs" /> : <FiCheckCircle />}
+              onClick={handleValidate}
+              isDisabled={isValidating}
+            >
+              {isValidating ? 'Checking...' : 'Validate'}
+            </Button>
             <Button
               size="sm"
               variant="ghost"
