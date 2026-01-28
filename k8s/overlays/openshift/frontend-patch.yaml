@@ -1,7 +1,6 @@
 # Patch frontend deployment for OpenShift SCC compatibility
 # - Adds security context for arbitrary UID compatibility
-# - Note: Container image must be configured to run as non-root
-#   (nginx should listen on unprivileged port 8080, not 80)
+# - Base deployment uses port 8080 with non-root nginx image
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,10 +14,6 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: frontend
-          # Override port if image is configured to run on 8080 for non-root
-          # ports:
-          #   - containerPort: 8080
-          #     name: http
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false

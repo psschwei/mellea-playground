@@ -33,6 +33,7 @@ spec:
 ---
 # Backend API Route - Handles /api/* requests
 # Must share hostname with frontend for path-based routing to work
+# NOTE: No rewrite-target - backend expects full /api/v1/... paths
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
@@ -43,7 +44,6 @@ metadata:
     app.kubernetes.io/component: api
   annotations:
     haproxy.router.openshift.io/enable-http2: "true"
-    haproxy.router.openshift.io/rewrite-target: /
 spec:
   path: /api
   port:

@@ -32,4 +32,4 @@ spec:
               service:
                 name: mellea-frontend
                 port:
-                  number: 80
+                  number: 8080

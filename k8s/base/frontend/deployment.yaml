@@ -25,7 +25,7 @@ spec:
         - name: frontend
           image: quay.io/psschwei/mellea-frontend:latest
           ports:
-            - containerPort: 80
+            - containerPort: 8080
               name: http
           resources:
             requests:
@@ -37,13 +37,13 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 80
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 15
           readinessProbe:
             httpGet:
               path: /health
-              port: 80
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
@@ -59,7 +59,7 @@ spec:
   selector:
     app.kubernetes.io/name: mellea-frontend
   ports:
-    - port: 80
-      targetPort: 80
+    - port: 8080
+      targetPort: 8080
       name: http
   type: ClusterIP

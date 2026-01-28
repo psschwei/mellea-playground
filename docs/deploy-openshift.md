@@ -81,7 +81,28 @@ This deploys:
 - Routes for external HTTPS access
 - RBAC resources (service accounts, roles, bindings)
 
-### Step 4: Verify Deployment
+### Step 4: Configure Shared Hostname for Routes (Required)
+
+For path-based routing to work, both the frontend and API routes **must share the same hostname**. By default, OpenShift auto-generates different hostnames for each route.
+
+```bash
+# Get the auto-generated frontend hostname
+FRONTEND_HOST=$(oc get route mellea-frontend -n mellea-system -o jsonpath='{.spec.host}')
+echo "Frontend hostname: $FRONTEND_HOST"
+
+# Patch both routes to share the same hostname
+oc patch route mellea-frontend -n mellea-system -p "{\"spec\":{\"host\":\"$FRONTEND_HOST\"}}"
+oc patch route mellea-api -n mellea-system -p "{\"spec\":{\"host\":\"$FRONTEND_HOST\"}}"
+```
+
+Alternatively, use a custom hostname:
+```bash
+CUSTOM_HOST="mellea.apps.your-cluster.example.com"
+oc patch route mellea-frontend -n mellea-system -p "{\"spec\":{\"host\":\"$CUSTOM_HOST\"}}"
+oc patch route mellea-api -n mellea-system -p "{\"spec\":{\"host\":\"$CUSTOM_HOST\"}}"
+```
+
+### Step 5: Verify Deployment
 
 ```bash
 # Check all pods are running
@@ -100,7 +121,7 @@ oc get pvc -n mellea-system
 oc get routes -n mellea-system
 ```
 
-### Step 5: Access the Application
+### Step 6: Access the Application
 
 Get the application URL:
 
@@ -115,17 +136,7 @@ The application will be available at `https://<route-hostname>/`.
 
 ### Custom Hostname
 
-By default, OpenShift auto-generates hostnames. To use a custom domain:
-
-```bash
-# Patch both routes to use the same custom hostname
-oc patch route mellea-frontend -n mellea-system \
-  -p '{"spec":{"host":"mellea.your-domain.com"}}'
-oc patch route mellea-api -n mellea-system \
-  -p '{"spec":{"host":"mellea.your-domain.com"}}'
-```
-
-Ensure your DNS points to the OpenShift router's external IP.
+See Step 4 above for configuring route hostnames. If using a custom domain, ensure your DNS points to the OpenShift router's external IP.
 
 ### Custom StorageClass
 
@@ -282,6 +293,77 @@ If the frontend loads but API calls fail:
 
 ```bash
 oc exec -n mellea-system deployment/mellea-api -- curl -s localhost:8000/health
+```
+
+## Testing the Deployment
+
+After deploying, verify all components are working correctly:
+
+### Test Redis Connectivity
+
+```bash
+# Check Redis pod is running
+oc get pods -n mellea-system -l app.kubernetes.io/name=redis
+
+# Verify Redis is responding
+oc exec -n mellea-system deployment/redis -- redis-cli ping
+# Expected: PONG
+```
+
+### Test Backend API Health
+
+```bash
+# Check API pod is ready
+oc get pods -n mellea-system -l app.kubernetes.io/name=mellea-api
+
+# Test health endpoint internally
+oc exec -n mellea-system deployment/mellea-api -- curl -s localhost:8000/health
+# Expected: {"status":"healthy",...}
+
+# Test via route (use the shared hostname)
+HOST=$(oc get route mellea-frontend -n mellea-system -o jsonpath='{.spec.host}')
+curl -s "https://$HOST/api/v1/auth/me" -H "Content-Type: application/json"
+# Expected: 401 unauthorized (or valid response if authenticated)
+```
+
+### Test Frontend
+
+```bash
+# Check frontend pod is ready
+oc get pods -n mellea-system -l app.kubernetes.io/name=mellea-frontend
+
+# Test frontend health endpoint
+oc exec -n mellea-system deployment/mellea-frontend -- wget -q -O- http://localhost:8080/health
+# Expected: OK
+
+# Access in browser
+echo "Open: https://$HOST/"
+```
+
+### Test Storage Persistence
+
+```bash
+# Verify PVCs are bound
+oc get pvc -n mellea-system
+
+# Test that storage survives pod restart
+oc rollout restart deployment/mellea-api -n mellea-system
+oc rollout status deployment/mellea-api -n mellea-system
+
+# Verify data is still accessible (API should still function)
+oc exec -n mellea-system deployment/mellea-api -- curl -s localhost:8000/health
+```
+
+### Test TLS
+
+```bash
+# Verify routes have TLS enabled
+oc get routes -n mellea-system -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.tls.termination}{"\n"}{end}'
+# Expected: Both routes show "edge"
+
+# Test HTTPS redirect
+curl -I "http://$HOST/" 2>/dev/null | head -2
+# Expected: 302 redirect to https
 ```
 
 ## Updating the Deployment
