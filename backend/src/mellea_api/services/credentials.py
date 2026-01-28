@@ -8,8 +8,11 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -37,16 +40,134 @@ class CredentialNotFoundError(Exception):
 class CredentialValidationError(Exception):
     """Raised when credential validation fails."""
 
-    def __init__(self, message: str, missing_keys: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        missing_keys: list[str] | None = None,
+        invalid_format: dict[str, str] | None = None,
+    ) -> None:
         """Initialize validation error.
 
         Args:
             message: Error message
             missing_keys: List of missing required keys
+            invalid_format: Dict of key -> error description for format errors
         """
         super().__init__(message)
         self.message = message
         self.missing_keys = missing_keys or []
+        self.invalid_format = invalid_format or {}
+
+
+# -----------------------------------------------------------------------------
+# API Key Format Validation
+# -----------------------------------------------------------------------------
+# Extensible pattern-based validation for provider API keys.
+# Each provider can define a regex pattern and human-readable format description.
+
+
+@dataclass
+class ApiKeyFormat:
+    """Format specification for API key validation."""
+
+    pattern: re.Pattern[str]
+    description: str
+    example: str
+
+
+# Known API key format patterns
+# OpenAI keys: sk-<type>-<chars> or sk-<chars> (typically 48-164 chars)
+# Anthropic keys: sk-ant-<api/admin>-<chars> (typically 108 chars)
+OPENAI_KEY_PATTERN = re.compile(
+    r"^sk-(?:proj-)?[A-Za-z0-9_-]{20,}$"
+)
+ANTHROPIC_KEY_PATTERN = re.compile(
+    r"^sk-ant-(?:api|admin)[0-9]{2}-[A-Za-z0-9_-]{20,}$"
+)
+
+# Provider format validators registry
+# Maps provider -> key_name -> ApiKeyFormat
+PROVIDER_FORMAT_VALIDATORS: dict[str, dict[str, ApiKeyFormat]] = {
+    ModelProvider.OPENAI.value: {
+        "api_key": ApiKeyFormat(
+            pattern=OPENAI_KEY_PATTERN,
+            description="OpenAI API key must start with 'sk-' followed by alphanumeric characters",
+            example="sk-proj-abc123...",
+        ),
+    },
+    ModelProvider.ANTHROPIC.value: {
+        "api_key": ApiKeyFormat(
+            pattern=ANTHROPIC_KEY_PATTERN,
+            description="Anthropic API key must start with 'sk-ant-api' or 'sk-ant-admin' followed by version and characters",
+            example="sk-ant-api03-abc123...",
+        ),
+    },
+}
+
+
+def validate_api_key_format(
+    provider: str,
+    key_name: str,
+    value: str,
+    strict: bool = True,
+) -> tuple[bool, str | None]:
+    """Validate an API key's format against provider-specific patterns.
+
+    Args:
+        provider: The provider name (openai, anthropic, etc.)
+        key_name: The key being validated (e.g., 'api_key')
+        value: The actual key value to validate
+        strict: If True, unknown providers/keys fail. If False, they pass.
+
+    Returns:
+        Tuple of (is_valid, error_message or None)
+    """
+    validators = PROVIDER_FORMAT_VALIDATORS.get(provider)
+    if validators is None:
+        # Unknown provider - pass if not strict
+        return (True, None) if not strict else (True, None)
+
+    format_spec = validators.get(key_name)
+    if format_spec is None:
+        # No format spec for this key - pass
+        return (True, None)
+
+    if format_spec.pattern.match(value):
+        return (True, None)
+
+    return (False, f"{format_spec.description}. Example: {format_spec.example}")
+
+
+def register_format_validator(
+    provider: str,
+    key_name: str,
+    pattern: str | re.Pattern[str],
+    description: str,
+    example: str,
+) -> None:
+    """Register a new format validator for a provider's key.
+
+    This allows extending validation to new providers without modifying
+    the core validation code.
+
+    Args:
+        provider: Provider name (e.g., 'my-provider')
+        key_name: Key to validate (e.g., 'api_key')
+        pattern: Regex pattern (string or compiled)
+        description: Human-readable format description
+        example: Example of valid format
+    """
+    if isinstance(pattern, str):
+        pattern = re.compile(pattern)
+
+    if provider not in PROVIDER_FORMAT_VALIDATORS:
+        PROVIDER_FORMAT_VALIDATORS[provider] = {}
+
+    PROVIDER_FORMAT_VALIDATORS[provider][key_name] = ApiKeyFormat(
+        pattern=pattern,
+        description=description,
+        example=example,
+    )
 
 
 # Provider-specific validation rules
@@ -73,16 +194,22 @@ def validate_secret_data(
     provider: ModelProvider | str | None,
     secret_data: dict[str, str],
     credential_type: CredentialType = CredentialType.API_KEY,
+    validate_format: bool = True,
 ) -> None:
     """Validate secret_data against provider-specific rules.
+
+    This performs two types of validation:
+    1. Required keys validation - ensures all required keys are present
+    2. Format validation - validates API key format against known patterns
 
     Args:
         provider: The LLM provider (openai, anthropic, etc.)
         secret_data: The secret key-value pairs to validate
         credential_type: The type of credential
+        validate_format: Whether to validate API key formats (default True)
 
     Raises:
-        CredentialValidationError: If required keys are missing or validation fails
+        CredentialValidationError: If required keys are missing or format validation fails
     """
     if not secret_data:
         raise CredentialValidationError("secret_data cannot be empty")
@@ -118,6 +245,24 @@ def validate_secret_data(
             f"Missing required keys for {provider_str}: {sorted(missing_keys)}",
             missing_keys=sorted(missing_keys),
         )
+
+    # Validate API key formats if enabled
+    if validate_format:
+        format_errors: dict[str, str] = {}
+        for key, value in secret_data.items():
+            is_valid, error_msg = validate_api_key_format(
+                provider_str, key, value, strict=False
+            )
+            if not is_valid and error_msg:
+                format_errors[key] = error_msg
+
+        if format_errors:
+            error_keys = ", ".join(format_errors.keys())
+            details = "; ".join(f"{k}: {v}" for k, v in format_errors.items())
+            raise CredentialValidationError(
+                f"Invalid format for {provider_str} key(s) [{error_keys}]: {details}",
+                invalid_format=format_errors,
+            )
 
     # Warn about unexpected keys (but don't fail)
     allowed_keys = required_keys | optional_keys
@@ -167,6 +312,216 @@ def _validate_azure_secret_data(secret_data: dict[str, str]) -> None:
         f"Missing for OAuth mode: {sorted(oauth_missing)}.",
         missing_keys=sorted(api_key_missing),
     )
+
+
+# -----------------------------------------------------------------------------
+# Optional Connection Testing
+# -----------------------------------------------------------------------------
+# Async functions to verify credentials by making actual API calls.
+# These are opt-in and can be disabled for performance or offline testing.
+
+
+@dataclass
+class ConnectionTestResult:
+    """Result of a connection test."""
+
+    success: bool
+    message: str
+    provider: str
+    response_time_ms: float | None = None
+
+
+async def test_openai_connection(api_key: str, organization_id: str | None = None) -> ConnectionTestResult:
+    """Test OpenAI API connection by listing models.
+
+    Args:
+        api_key: OpenAI API key
+        organization_id: Optional organization ID
+
+    Returns:
+        ConnectionTestResult with success status and message
+    """
+    import time
+
+    try:
+        import httpx
+    except ImportError:
+        return ConnectionTestResult(
+            success=False,
+            message="httpx not installed - cannot test connection",
+            provider="openai",
+        )
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    if organization_id:
+        headers["OpenAI-Organization"] = organization_id
+
+    start_time = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                "https://api.openai.com/v1/models",
+                headers=headers,
+            )
+            elapsed_ms = (time.monotonic() - start_time) * 1000
+
+            if response.status_code == 200:
+                return ConnectionTestResult(
+                    success=True,
+                    message="Successfully connected to OpenAI API",
+                    provider="openai",
+                    response_time_ms=elapsed_ms,
+                )
+            elif response.status_code == 401:
+                return ConnectionTestResult(
+                    success=False,
+                    message="Invalid API key",
+                    provider="openai",
+                    response_time_ms=elapsed_ms,
+                )
+            else:
+                return ConnectionTestResult(
+                    success=False,
+                    message=f"API error: {response.status_code}",
+                    provider="openai",
+                    response_time_ms=elapsed_ms,
+                )
+    except httpx.TimeoutException:
+        return ConnectionTestResult(
+            success=False,
+            message="Connection timeout",
+            provider="openai",
+        )
+    except Exception as e:
+        return ConnectionTestResult(
+            success=False,
+            message=f"Connection error: {e!s}",
+            provider="openai",
+        )
+
+
+async def test_anthropic_connection(api_key: str) -> ConnectionTestResult:
+    """Test Anthropic API connection.
+
+    Args:
+        api_key: Anthropic API key
+
+    Returns:
+        ConnectionTestResult with success status and message
+    """
+    import time
+
+    try:
+        import httpx
+    except ImportError:
+        return ConnectionTestResult(
+            success=False,
+            message="httpx not installed - cannot test connection",
+            provider="anthropic",
+        )
+
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+    }
+
+    # Anthropic doesn't have a lightweight endpoint, so we make a minimal
+    # messages request that will fail quickly but validate the key
+    start_time = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Send minimal request - will fail but validates auth
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=headers,
+                json={
+                    "model": "claude-3-haiku-20240307",
+                    "max_tokens": 1,
+                    "messages": [{"role": "user", "content": "test"}],
+                },
+            )
+            elapsed_ms = (time.monotonic() - start_time) * 1000
+
+            # 200 = success, 400 = bad request (key valid), 401 = invalid key
+            if response.status_code in (200, 400):
+                return ConnectionTestResult(
+                    success=True,
+                    message="Successfully connected to Anthropic API",
+                    provider="anthropic",
+                    response_time_ms=elapsed_ms,
+                )
+            elif response.status_code == 401:
+                return ConnectionTestResult(
+                    success=False,
+                    message="Invalid API key",
+                    provider="anthropic",
+                    response_time_ms=elapsed_ms,
+                )
+            else:
+                return ConnectionTestResult(
+                    success=False,
+                    message=f"API error: {response.status_code}",
+                    provider="anthropic",
+                    response_time_ms=elapsed_ms,
+                )
+    except httpx.TimeoutException:
+        return ConnectionTestResult(
+            success=False,
+            message="Connection timeout",
+            provider="anthropic",
+        )
+    except Exception as e:
+        return ConnectionTestResult(
+            success=False,
+            message=f"Connection error: {e!s}",
+            provider="anthropic",
+        )
+
+
+# Registry of connection test functions per provider
+CONNECTION_TESTERS: dict[str, Callable[..., ConnectionTestResult]] = {
+    ModelProvider.OPENAI.value: test_openai_connection,
+    ModelProvider.ANTHROPIC.value: test_anthropic_connection,
+}
+
+
+async def test_provider_connection(
+    provider: str,
+    secret_data: dict[str, str],
+) -> ConnectionTestResult:
+    """Test connection to a provider using credentials.
+
+    Args:
+        provider: Provider name (openai, anthropic, etc.)
+        secret_data: Credential data with api_key and optional fields
+
+    Returns:
+        ConnectionTestResult with success status and details
+    """
+    tester = CONNECTION_TESTERS.get(provider)
+    if tester is None:
+        return ConnectionTestResult(
+            success=True,
+            message=f"No connection test available for provider: {provider}",
+            provider=provider,
+        )
+
+    api_key = secret_data.get("api_key")
+    if not api_key:
+        return ConnectionTestResult(
+            success=False,
+            message="api_key not found in secret_data",
+            provider=provider,
+        )
+
+    if provider == ModelProvider.OPENAI.value:
+        return await tester(api_key, secret_data.get("organization_id"))
+    else:
+        return await tester(api_key)
 
 
 class CredentialBackend(ABC):

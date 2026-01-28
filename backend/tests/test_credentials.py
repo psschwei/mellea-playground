@@ -10,10 +10,13 @@ from mellea_api.core.config import Settings
 from mellea_api.models.common import CredentialType, ModelProvider
 from mellea_api.models.credential import Credential, CredentialUpdate
 from mellea_api.services.credentials import (
+    ConnectionTestResult,
     CredentialNotFoundError,
     CredentialService,
     CredentialValidationError,
     EncryptedFileBackend,
+    register_format_validator,
+    validate_api_key_format,
     validate_secret_data,
 )
 
@@ -215,12 +218,16 @@ class TestEncryptedFileBackend:
 class TestCredentialService:
     """Tests for the CredentialService."""
 
+    # Valid-format test keys for use in tests
+    VALID_OPENAI_KEY = "sk-proj-abcdefghijklmnopqrstuvwxyz"
+    VALID_ANTHROPIC_KEY = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz"
+
     def test_create_credential(self, credential_service: CredentialService):
         """Test creating a credential through the service."""
         cred = credential_service.create_credential(
             name="OpenAI Key",
             credential_type=CredentialType.API_KEY,
-            secret_data={"api_key": "sk-test"},
+            secret_data={"api_key": self.VALID_OPENAI_KEY},
             provider="openai",
             owner_id="user-123",
             description="Production API key",
@@ -401,11 +408,15 @@ class TestCredentialModel:
 class TestProviderValidation:
     """Tests for provider-specific secret_data validation."""
 
+    # Valid-format test keys
+    VALID_OPENAI_KEY = "sk-proj-abcdefghijklmnopqrstuvwxyz"
+    VALID_ANTHROPIC_KEY = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz"
+
     def test_openai_valid(self):
         """Test valid OpenAI credentials."""
         validate_secret_data(
             ModelProvider.OPENAI,
-            {"api_key": "sk-test"},
+            {"api_key": self.VALID_OPENAI_KEY},
         )
         # Should not raise
 
@@ -413,7 +424,7 @@ class TestProviderValidation:
         """Test OpenAI credentials with optional organization_id."""
         validate_secret_data(
             ModelProvider.OPENAI,
-            {"api_key": "sk-test", "organization_id": "org-123"},
+            {"api_key": self.VALID_OPENAI_KEY, "organization_id": "org-123"},
         )
         # Should not raise
 
@@ -430,7 +441,7 @@ class TestProviderValidation:
         """Test valid Anthropic credentials."""
         validate_secret_data(
             ModelProvider.ANTHROPIC,
-            {"api_key": "sk-ant-test"},
+            {"api_key": self.VALID_ANTHROPIC_KEY},
         )
         # Should not raise
 
@@ -522,7 +533,7 @@ class TestProviderValidation:
         """Test validation works with string provider value."""
         validate_secret_data(
             "openai",
-            {"api_key": "sk-test"},
+            {"api_key": self.VALID_OPENAI_KEY},
         )
         # Should not raise
 
@@ -549,6 +560,9 @@ class TestProviderValidation:
 class TestServiceValidation:
     """Tests for validation integration in CredentialService."""
 
+    # Valid-format test keys
+    VALID_OPENAI_KEY = "sk-proj-abcdefghijklmnopqrstuvwxyz"
+
     def test_create_credential_validates(self, credential_service: CredentialService):
         """Test that create_credential validates secret_data."""
         with pytest.raises(CredentialValidationError):
@@ -564,7 +578,7 @@ class TestServiceValidation:
         cred = credential_service.create_credential(
             name="Valid OpenAI",
             credential_type=CredentialType.API_KEY,
-            secret_data={"api_key": "sk-test"},
+            secret_data={"api_key": self.VALID_OPENAI_KEY},
             provider=ModelProvider.OPENAI,
         )
         assert cred.name == "Valid OpenAI"
@@ -575,7 +589,7 @@ class TestServiceValidation:
         cred = credential_service.create_credential(
             name="Test",
             credential_type=CredentialType.API_KEY,
-            secret_data={"api_key": "sk-test"},
+            secret_data={"api_key": self.VALID_OPENAI_KEY},
             provider=ModelProvider.OPENAI,
         )
 
@@ -593,7 +607,7 @@ class TestServiceValidation:
         cred = credential_service.create_credential(
             name="Test",
             credential_type=CredentialType.API_KEY,
-            secret_data={"api_key": "sk-test"},
+            secret_data={"api_key": self.VALID_OPENAI_KEY},
             provider=ModelProvider.OPENAI,
         )
 
@@ -603,3 +617,188 @@ class TestServiceValidation:
             name="New Name",
         )
         assert updated.name == "New Name"
+
+
+class TestApiKeyFormatValidation:
+    """Tests for API key format validation."""
+
+    def test_openai_valid_format(self):
+        """Test valid OpenAI API key format."""
+        is_valid, error = validate_api_key_format(
+            "openai", "api_key", "sk-proj-abcdefghijklmnopqrstuvwxyz"
+        )
+        assert is_valid is True
+        assert error is None
+
+    def test_openai_valid_format_no_proj(self):
+        """Test valid OpenAI API key format without proj prefix."""
+        is_valid, error = validate_api_key_format(
+            "openai", "api_key", "sk-abcdefghijklmnopqrstuvwxyz123456"
+        )
+        assert is_valid is True
+        assert error is None
+
+    def test_openai_invalid_format_wrong_prefix(self):
+        """Test OpenAI API key with wrong prefix."""
+        is_valid, error = validate_api_key_format(
+            "openai", "api_key", "invalid-key-format"
+        )
+        assert is_valid is False
+        assert error is not None
+        assert "sk-" in error
+
+    def test_openai_invalid_format_too_short(self):
+        """Test OpenAI API key that's too short."""
+        is_valid, error = validate_api_key_format(
+            "openai", "api_key", "sk-short"
+        )
+        assert is_valid is False
+        assert error is not None
+
+    def test_anthropic_valid_format(self):
+        """Test valid Anthropic API key format."""
+        is_valid, error = validate_api_key_format(
+            "anthropic", "api_key", "sk-ant-api03-abcdefghijklmnopqrstuvwxyz"
+        )
+        assert is_valid is True
+        assert error is None
+
+    def test_anthropic_valid_admin_format(self):
+        """Test valid Anthropic admin API key format."""
+        is_valid, error = validate_api_key_format(
+            "anthropic", "api_key", "sk-ant-admin01-abcdefghijklmnopqrstuvwxyz"
+        )
+        assert is_valid is True
+        assert error is None
+
+    def test_anthropic_invalid_format(self):
+        """Test Anthropic API key with wrong format."""
+        is_valid, error = validate_api_key_format(
+            "anthropic", "api_key", "sk-wrong-format"
+        )
+        assert is_valid is False
+        assert error is not None
+        assert "sk-ant" in error
+
+    def test_unknown_provider_passes(self):
+        """Test unknown provider passes validation."""
+        is_valid, error = validate_api_key_format(
+            "unknown-provider", "api_key", "any-format"
+        )
+        assert is_valid is True
+        assert error is None
+
+    def test_unknown_key_passes(self):
+        """Test unknown key name passes validation."""
+        is_valid, error = validate_api_key_format(
+            "openai", "organization_id", "org-123"
+        )
+        assert is_valid is True
+        assert error is None
+
+    def test_register_custom_validator(self):
+        """Test registering a custom format validator."""
+        register_format_validator(
+            provider="my-provider",
+            key_name="api_key",
+            pattern=r"^mp-[a-z0-9]{16}$",
+            description="MyProvider key must start with 'mp-' followed by 16 alphanumeric chars",
+            example="mp-abc123def456xyz0",
+        )
+
+        # Valid key
+        is_valid, error = validate_api_key_format(
+            "my-provider", "api_key", "mp-abcdefgh12345678"
+        )
+        assert is_valid is True
+
+        # Invalid key
+        is_valid, error = validate_api_key_format(
+            "my-provider", "api_key", "wrong-format"
+        )
+        assert is_valid is False
+        assert "mp-" in error
+
+
+class TestFormatValidationIntegration:
+    """Tests for format validation integrated with validate_secret_data."""
+
+    def test_validate_secret_data_with_format(self):
+        """Test validate_secret_data includes format validation."""
+        # Valid format passes
+        validate_secret_data(
+            ModelProvider.OPENAI,
+            {"api_key": "sk-proj-abcdefghijklmnopqrstuvwxyz"},
+        )
+        # Should not raise
+
+    def test_validate_secret_data_invalid_format_raises(self):
+        """Test validate_secret_data raises on invalid format."""
+        with pytest.raises(CredentialValidationError) as exc_info:
+            validate_secret_data(
+                ModelProvider.OPENAI,
+                {"api_key": "invalid-format-key"},
+            )
+        assert "Invalid format" in exc_info.value.message
+        assert exc_info.value.invalid_format.get("api_key") is not None
+
+    def test_validate_secret_data_format_disabled(self):
+        """Test format validation can be disabled."""
+        # This would fail format validation but passes with it disabled
+        validate_secret_data(
+            ModelProvider.OPENAI,
+            {"api_key": "sk-short"},  # Too short but passes required key check
+            validate_format=False,
+        )
+        # Should not raise
+
+    def test_anthropic_format_validation(self):
+        """Test Anthropic format validation in validate_secret_data."""
+        with pytest.raises(CredentialValidationError) as exc_info:
+            validate_secret_data(
+                ModelProvider.ANTHROPIC,
+                {"api_key": "sk-wrong-format"},
+            )
+        assert "Invalid format" in exc_info.value.message
+
+    def test_custom_provider_skips_format(self):
+        """Test custom provider skips format validation."""
+        validate_secret_data(
+            ModelProvider.CUSTOM,
+            {"api_key": "any-format-allowed"},
+        )
+        # Should not raise
+
+    def test_ollama_skips_format(self):
+        """Test Ollama skips format validation (no format rules)."""
+        validate_secret_data(
+            ModelProvider.OLLAMA,
+            {"api_key": "any-optional-key"},
+        )
+        # Should not raise
+
+
+class TestConnectionTestResult:
+    """Tests for ConnectionTestResult dataclass."""
+
+    def test_success_result(self):
+        """Test creating a success result."""
+        result = ConnectionTestResult(
+            success=True,
+            message="Connected successfully",
+            provider="openai",
+            response_time_ms=123.45,
+        )
+        assert result.success is True
+        assert result.provider == "openai"
+        assert result.response_time_ms == 123.45
+
+    def test_failure_result(self):
+        """Test creating a failure result."""
+        result = ConnectionTestResult(
+            success=False,
+            message="Invalid API key",
+            provider="anthropic",
+        )
+        assert result.success is False
+        assert result.response_time_ms is None
