@@ -41,10 +41,10 @@ import { FiArrowLeft, FiPlay, FiClock, FiTrash2, FiRefreshCw } from 'react-icons
 function isTerminalStatus(status: string): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'cancelled';
 }
-import { CodeViewer } from '@/components/Programs';
+import { CodeViewer, DependenciesEditor } from '@/components/Programs';
 import { RunPanel, RunStatusBadge, LogViewer } from '@/components/Runs';
 import { programsApi, runsApi } from '@/api';
-import type { ProgramAsset, Run } from '@/types';
+import type { ProgramAsset, Run, ProgramDependencies } from '@/types';
 
 function formatDate(dateString?: string): string {
   if (!dateString) return '-';
@@ -724,6 +724,25 @@ export function ProgramDetailPage() {
                   {program.resourceProfile?.timeoutSeconds || 300}s
                 </Text>
               </Box>
+
+              <Divider my={4} />
+
+              {/* Dependencies Section */}
+              <DependenciesEditor
+                programId={program.id}
+                dependencies={program.dependencies}
+                onUpdate={(deps: ProgramDependencies, buildRequired: boolean) => {
+                  setProgram((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          dependencies: deps,
+                          imageBuildStatus: buildRequired ? 'pending' : prev.imageBuildStatus,
+                        }
+                      : null
+                  );
+                }}
+              />
 
               <Divider my={4} />
 

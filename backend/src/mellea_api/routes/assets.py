@@ -13,6 +13,7 @@ from mellea_api.models.assets import (
     DependencySpec,
     EndpointConfig,
     ModelAsset,
+    PackageRef,
     ProgramAsset,
 )
 from mellea_api.models.build import BuildJob, BuildJobStatus, BuildResult
@@ -102,6 +103,29 @@ class UpdateAssetRequest(BaseModel):
     description: str | None = None
     tags: list[str] | None = None
     version: str | None = None
+
+
+class UpdateDependenciesRequest(BaseModel):
+    """Request model for updating program dependencies."""
+
+    packages: list[PackageRef] = Field(
+        default_factory=list,
+        description="List of Python packages with optional version constraints",
+    )
+
+
+class UpdateDependenciesResponse(BaseModel):
+    """Response for dependency update operation."""
+
+    program_id: str = Field(alias="programId")
+    dependencies: DependencySpec
+    build_required: bool = Field(
+        alias="buildRequired",
+        description="Whether a rebuild is required due to dependency changes",
+    )
+
+    class Config:
+        populate_by_name = True
 
 
 class DeleteAssetResponse(BaseModel):
@@ -562,6 +586,94 @@ async def delete_asset(
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Asset not found: {asset_id}",
+    )
+
+
+@router.put(
+    "/programs/{program_id}/dependencies",
+    response_model=UpdateDependenciesResponse,
+)
+async def update_program_dependencies(
+    program_id: str,
+    request: UpdateDependenciesRequest,
+    current_user: CurrentUser,
+    service: AssetServiceDep,
+) -> UpdateDependenciesResponse:
+    """Update a program's library dependencies.
+
+    Updates the list of Python packages required by the program.
+    When dependencies change, a rebuild will be required before the next run.
+
+    Args:
+        program_id: ID of the program to update
+        request: New dependency specification
+
+    Returns:
+        Updated dependencies and rebuild status.
+
+    Raises:
+        404: If the program is not found
+        403: If the user doesn't own the program
+        400: If validation fails
+    """
+    program = service.get_program(program_id)
+    if program is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Program not found: {program_id}",
+        )
+
+    if program.owner != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to update this program",
+        )
+
+    # Validate package names (basic validation)
+    import re
+    package_name_pattern = re.compile(r'^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$')
+    for pkg in request.packages:
+        if not package_name_pattern.match(pkg.name):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid package name: {pkg.name}",
+            )
+
+    # Check if dependencies actually changed
+    old_packages = {(p.name.lower(), p.version) for p in program.dependencies.packages}
+    new_packages = {(p.name.lower(), p.version) for p in request.packages}
+    build_required = old_packages != new_packages
+
+    # Update dependencies
+    program.dependencies = DependencySpec(
+        source=DependencySource.MANUAL,
+        packages=request.packages,
+        python_version=program.dependencies.python_version,
+        lockfile_hash=None,  # Clear lockfile hash since packages changed
+    )
+
+    # Mark image as needing rebuild if dependencies changed
+    if build_required and program.image_build_status == ImageBuildStatus.READY:
+        program.image_build_status = ImageBuildStatus.PENDING
+
+    updated = service.update_program(program_id, program)
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update program dependencies",
+        )
+
+    logger.info(
+        "Updated dependencies for program %s: %d packages, rebuild_required=%s",
+        program_id,
+        len(request.packages),
+        build_required,
+    )
+
+    return UpdateDependenciesResponse(
+        programId=program_id,
+        dependencies=updated.dependencies,
+        buildRequired=build_required,
     )
 
 

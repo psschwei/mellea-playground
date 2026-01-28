@@ -72,10 +72,26 @@ export interface ResourceProfile {
   timeoutSeconds: number;
 }
 
+export interface PackageRef {
+  name: string;
+  version?: string;
+  extras?: string[];
+}
+
 export interface ProgramDependencies {
   source: 'pyproject' | 'requirements' | 'manual';
-  packages: { name: string; version?: string }[];
+  packages: PackageRef[];
   pythonVersion?: string;
+}
+
+export interface UpdateDependenciesRequest {
+  packages: PackageRef[];
+}
+
+export interface UpdateDependenciesResponse {
+  programId: string;
+  dependencies: ProgramDependencies;
+  buildRequired: boolean;
 }
 
 export interface ProgramAsset extends AssetMetadata {
@@ -370,6 +386,76 @@ export type Asset = ProgramAsset | ModelAsset | CompositionAsset;
 
 // Asset type literal
 export type AssetType = 'program' | 'model' | 'composition';
+
+// Sharing types
+export type Permission = 'view' | 'run' | 'edit';
+export type ResourceType = 'program' | 'model' | 'composition';
+
+export interface ShareLink {
+  id: string;
+  token: string;
+  resourceId: string;
+  resourceType: ResourceType;
+  permission: Permission;
+  createdBy: string;
+  createdAt: string;
+  expiresAt?: string;
+  label?: string;
+  accessCount: number;
+  lastAccessedAt?: string;
+  isActive: boolean;
+  shareUrl: string;
+}
+
+export interface CreateShareLinkRequest {
+  resourceId: string;
+  resourceType: ResourceType;
+  permission?: Permission;
+  expiresInHours?: number;
+  label?: string;
+}
+
+export interface ShareLinkListResponse {
+  links: ShareLink[];
+  total: number;
+}
+
+export interface ShareWithUserRequest {
+  resourceId: string;
+  resourceType: ResourceType;
+  userId: string;
+  permission?: Permission;
+}
+
+export interface SharedWithMeItem {
+  resourceId: string;
+  resourceType: ResourceType;
+  resourceName: string;
+  permission: Permission;
+  sharedBy: string;
+  sharedByName: string;
+  sharedAt: string;
+}
+
+export interface SharedWithMeResponse {
+  items: SharedWithMeItem[];
+  total: number;
+}
+
+export interface SharedUser {
+  userId: string;
+  username?: string;
+  displayName?: string;
+  permission: Permission;
+}
+
+export interface ShareLinkVerification {
+  valid: boolean;
+  resourceId: string;
+  resourceType: ResourceType;
+  resourceName?: string;
+  permission: Permission;
+}
 
 // API response types
 export interface ApiError {

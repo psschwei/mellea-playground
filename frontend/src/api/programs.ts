@@ -1,5 +1,12 @@
 import apiClient from './client';
-import type { ProgramAsset, CreateProgramRequest, BuildImageRequest, BuildResult } from '@/types';
+import type {
+  ProgramAsset,
+  CreateProgramRequest,
+  BuildImageRequest,
+  BuildResult,
+  UpdateDependenciesRequest,
+  UpdateDependenciesResponse,
+} from '@/types';
 
 export const programsApi = {
   /**
@@ -48,5 +55,19 @@ export const programsApi = {
   build: async (id: string, options?: BuildImageRequest): Promise<BuildResult> => {
     const response = await apiClient.post<{ result: BuildResult }>(`/assets/${id}/build`, options);
     return response.data.result;
+  },
+
+  /**
+   * Update a program's library dependencies
+   */
+  updateDependencies: async (
+    id: string,
+    data: UpdateDependenciesRequest
+  ): Promise<UpdateDependenciesResponse> => {
+    const response = await apiClient.put<UpdateDependenciesResponse>(
+      `/assets/programs/${id}/dependencies`,
+      data
+    );
+    return response.data;
   },
 };
