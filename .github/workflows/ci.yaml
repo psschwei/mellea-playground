@@ -216,7 +216,7 @@ jobs:
         uses: helm/kind-action@v1
         with:
           cluster_name: mellea
-          config: k8s/kind-config.yaml
+          config: k8s/overlays/kind/kind-config.yaml
 
       - name: Create data directories
         run: |
@@ -224,12 +224,7 @@ jobs:
 
       - name: Apply Kubernetes manifests
         run: |
-          kubectl apply -f k8s/namespaces/namespaces.yaml
-          kubectl apply -f k8s/storage/storage-class.yaml
-          kubectl apply -f k8s/storage/persistent-volumes.yaml
-          kubectl apply -f k8s/storage/persistent-volume-claims.yaml
-          kubectl apply -f k8s/redis/redis-config.yaml
-          kubectl apply -f k8s/redis/redis-deployment.yaml
+          kubectl apply -k k8s/overlays/kind/
 
       - name: Wait for Redis
         run: |
