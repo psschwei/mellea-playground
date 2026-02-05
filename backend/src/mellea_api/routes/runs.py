@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from mellea_api.core.deps import CurrentUser, CurrentUserSSE
-from mellea_api.models.common import ImageBuildStatus, RunExecutionStatus
+from mellea_api.models.common import ImageBuildStatus, Permission, RunExecutionStatus, SharingMode
 from mellea_api.models.run import Run
 from mellea_api.services.assets import AssetService, get_asset_service
 from mellea_api.services.credentials import CredentialService, get_credential_service
@@ -92,6 +92,45 @@ class BulkDeleteResponse(BaseModel):
     )
     deleted_count: int = Field(alias="deletedCount", description="Number of runs successfully deleted")
     failed_count: int = Field(alias="failedCount", description="Number of runs that failed to delete")
+
+    class Config:
+        populate_by_name = True
+
+
+class UpdateVisibilityRequest(BaseModel):
+    """Request body for updating run visibility."""
+
+    visibility: SharingMode = Field(description="New visibility mode (private, shared, public)")
+
+    class Config:
+        populate_by_name = True
+
+
+class ShareRunRequest(BaseModel):
+    """Request body for sharing a run with a user."""
+
+    user_id: str = Field(alias="userId", description="User ID to share with")
+    permission: Permission = Field(default=Permission.VIEW, description="Permission level")
+
+    class Config:
+        populate_by_name = True
+
+
+class SharedUserResponse(BaseModel):
+    """Response containing shared user info."""
+
+    user_id: str = Field(alias="userId")
+    permission: Permission
+
+    class Config:
+        populate_by_name = True
+
+
+class SharedUsersListResponse(BaseModel):
+    """Response containing list of shared users."""
+
+    users: list[SharedUserResponse]
+    total: int
 
     class Config:
         populate_by_name = True
@@ -247,19 +286,40 @@ async def list_runs(
     run_service: RunServiceDep,
     program_id: str | None = Query(None, alias="programId", description="Filter by program ID"),
     status: RunExecutionStatus | None = Query(None, description="Filter by status"),
+    visibility: SharingMode | None = Query(None, description="Filter by visibility mode"),
+    include_shared: bool = Query(
+        True,
+        alias="includeShared",
+        description="Include runs shared with the user (when False, only shows owned runs)",
+    ),
 ) -> RunsListResponse:
     """List runs with optional filters.
 
     Supports filtering by:
     - programId: Filter by program ID
     - status: Filter by execution status (queued, running, succeeded, failed, cancelled)
+    - visibility: Filter by visibility mode (private, shared, public)
+    - includeShared: When True (default), includes runs shared with the user.
+                     When False, only shows runs owned by the user.
 
-    Returns runs visible to the authenticated user.
+    Returns runs visible to the authenticated user based on ownership and sharing settings.
     """
-    runs = run_service.list_runs(
-        program_id=program_id,
-        status=status,
-    )
+    if include_shared:
+        # Show all runs the user can view (owns, shared with, or public)
+        runs = run_service.list_runs(
+            program_id=program_id,
+            status=status,
+            visibility=visibility,
+            viewer_id=current_user.id,
+        )
+    else:
+        # Show only runs owned by the user
+        runs = run_service.list_runs(
+            owner_id=current_user.id,
+            program_id=program_id,
+            status=status,
+            visibility=visibility,
+        )
 
     return RunsListResponse(runs=runs, total=len(runs))
 
@@ -332,6 +392,140 @@ async def bulk_delete_runs(
         deletedCount=deleted_count,
         failedCount=failed_count,
     )
+
+
+@router.patch("/{run_id}/visibility", response_model=RunResponse)
+async def update_run_visibility(
+    run_id: str,
+    request: UpdateVisibilityRequest,
+    current_user: CurrentUser,
+    run_service: RunServiceDep,
+) -> RunResponse:
+    """Update a run's visibility mode.
+
+    Visibility modes:
+    - private: Only the owner can view the run
+    - shared: Owner and explicitly shared users can view
+    - public: All authenticated users can view
+
+    Only the run owner can change visibility.
+    """
+    run = run_service.get_run(run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run not found: {run_id}",
+        )
+
+    # Only owner can change visibility
+    if run.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the run owner can change visibility",
+        )
+
+    updated_run = run_service.update_visibility(run_id, request.visibility)
+    return RunResponse(run=updated_run)
+
+
+@router.post("/{run_id}/share", response_model=RunResponse)
+async def share_run_with_user(
+    run_id: str,
+    request: ShareRunRequest,
+    current_user: CurrentUser,
+    run_service: RunServiceDep,
+) -> RunResponse:
+    """Share a run with a specific user.
+
+    Grants the specified user access to view the run. Only the run owner
+    can share runs.
+    """
+    run = run_service.get_run(run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run not found: {run_id}",
+        )
+
+    # Only owner can share
+    if run.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the run owner can share runs",
+        )
+
+    # Cannot share with yourself
+    if request.user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot share a run with yourself",
+        )
+
+    updated_run = run_service.share_run_with_user(run_id, request.user_id, request.permission)
+    return RunResponse(run=updated_run)
+
+
+@router.delete("/{run_id}/share/{user_id}", response_model=RunResponse)
+async def revoke_run_access(
+    run_id: str,
+    user_id: str,
+    current_user: CurrentUser,
+    run_service: RunServiceDep,
+) -> RunResponse:
+    """Revoke a user's access to a run.
+
+    Removes the specified user's access to view the run. Only the run owner
+    can revoke access.
+    """
+    run = run_service.get_run(run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run not found: {run_id}",
+        )
+
+    # Only owner can revoke access
+    if run.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the run owner can revoke access",
+        )
+
+    updated_run = run_service.revoke_run_access(run_id, user_id)
+    return RunResponse(run=updated_run)
+
+
+@router.get("/{run_id}/shared-users", response_model=SharedUsersListResponse)
+async def get_shared_users(
+    run_id: str,
+    current_user: CurrentUser,
+    run_service: RunServiceDep,
+) -> SharedUsersListResponse:
+    """Get list of users a run is shared with.
+
+    Returns the users who have explicit access to the run.
+    Only the run owner can view this list.
+    """
+    run = run_service.get_run(run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run not found: {run_id}",
+        )
+
+    # Only owner can view shared users
+    if run.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the run owner can view shared users",
+        )
+
+    shared_accesses = run_service.get_shared_users(run_id)
+    users = [
+        SharedUserResponse(userId=access.id, permission=access.permission)
+        for access in shared_accesses
+    ]
+    return SharedUsersListResponse(users=users, total=len(users))
 
 
 @router.post("/{run_id}/cancel", response_model=RunResponse)

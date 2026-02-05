@@ -121,11 +121,20 @@ export interface RunMetrics {
   totalDurationMs?: number;
 }
 
+export interface RunSharedAccess {
+  type: AccessType;
+  id: string;
+  permission: Permission;
+}
+
 export interface Run {
   id: string;
+  ownerId: string;
   programId: string;
   environmentId?: string;
   status: RunExecutionStatus;
+  visibility: SharingMode;
+  sharedWith?: RunSharedAccess[];
   jobName?: string;
   exitCode?: number;
   errorMessage?: string;

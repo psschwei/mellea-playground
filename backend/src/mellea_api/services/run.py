@@ -5,8 +5,8 @@ from datetime import datetime
 
 from mellea_api.core.config import Settings, get_settings
 from mellea_api.core.store import JsonStore
-from mellea_api.models.common import RunExecutionStatus
-from mellea_api.models.run import VALID_RUN_TRANSITIONS, Run
+from mellea_api.models.common import AccessType, Permission, RunExecutionStatus, SharingMode
+from mellea_api.models.run import VALID_RUN_TRANSITIONS, Run, RunSharedAccess
 
 logger = logging.getLogger(__name__)
 
@@ -176,14 +176,19 @@ class RunService:
         environment_id: str | None = None,
         program_id: str | None = None,
         status: RunExecutionStatus | None = None,
+        visibility: SharingMode | None = None,
+        viewer_id: str | None = None,
     ) -> list[Run]:
-        """List runs with optional filtering.
+        """List runs with optional filtering and visibility-based access control.
 
         Args:
             owner_id: Filter by owner ID
             environment_id: Filter by environment ID
             program_id: Filter by program ID
             status: Filter by status
+            visibility: Filter by visibility mode
+            viewer_id: If provided, only returns runs the viewer can access
+                       (owns, is shared with, or is public)
 
         Returns:
             List of matching runs
@@ -202,7 +207,39 @@ class RunService:
         if status:
             runs = [r for r in runs if r.status == status]
 
+        if visibility:
+            runs = [r for r in runs if r.visibility == visibility]
+
+        if viewer_id:
+            runs = [r for r in runs if self._can_view_run(r, viewer_id)]
+
         return runs
+
+    def _can_view_run(self, run: Run, user_id: str) -> bool:
+        """Check if a user can view a run based on visibility settings.
+
+        Args:
+            run: The run to check access for
+            user_id: The user ID to check
+
+        Returns:
+            True if the user can view the run
+        """
+        # Owner can always view
+        if run.owner_id == user_id:
+            return True
+
+        # Public runs are visible to all
+        if run.visibility == SharingMode.PUBLIC:
+            return True
+
+        # Check if explicitly shared with user
+        if run.visibility == SharingMode.SHARED:
+            for access in run.shared_with:
+                if access.type == AccessType.USER and access.id == user_id:
+                    return True
+
+        return False
 
     def update_status(
         self,
@@ -477,6 +514,155 @@ class RunService:
                 results[run_id] = str(e)
 
         return results
+
+    # -------------------------------------------------------------------------
+    # Visibility Operations
+    # -------------------------------------------------------------------------
+
+    def update_visibility(
+        self,
+        run_id: str,
+        visibility: SharingMode,
+    ) -> Run:
+        """Update a run's visibility mode.
+
+        Args:
+            run_id: Run's unique identifier
+            visibility: New visibility mode (private, shared, public)
+
+        Returns:
+            Updated Run
+
+        Raises:
+            RunNotFoundError: If run doesn't exist
+        """
+        run = self.run_store.get_by_id(run_id)
+        if run is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+
+        run.visibility = visibility
+
+        # If switching to private, clear shared_with list
+        if visibility == SharingMode.PRIVATE:
+            run.shared_with = []
+
+        updated = self.run_store.update(run_id, run)
+        if updated is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+
+        logger.info(f"Run {run_id} visibility updated to {visibility.value}")
+        return updated
+
+    def share_run_with_user(
+        self,
+        run_id: str,
+        user_id: str,
+        permission: Permission = Permission.VIEW,
+    ) -> Run:
+        """Share a run with a specific user.
+
+        Args:
+            run_id: Run's unique identifier
+            user_id: User ID to share with
+            permission: Permission level (view, run, edit)
+
+        Returns:
+            Updated Run
+
+        Raises:
+            RunNotFoundError: If run doesn't exist
+        """
+        run = self.run_store.get_by_id(run_id)
+        if run is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+
+        # Check if user already has access
+        existing_access = None
+        for access in run.shared_with:
+            if access.type == AccessType.USER and access.id == user_id:
+                existing_access = access
+                break
+
+        if existing_access:
+            # Update existing permission
+            existing_access.permission = permission
+        else:
+            # Add new access
+            run.shared_with.append(
+                RunSharedAccess(
+                    type=AccessType.USER,
+                    id=user_id,
+                    permission=permission,
+                )
+            )
+
+        # Ensure visibility is set to shared if not public
+        if run.visibility == SharingMode.PRIVATE:
+            run.visibility = SharingMode.SHARED
+
+        updated = self.run_store.update(run_id, run)
+        if updated is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+
+        logger.info(f"Run {run_id} shared with user {user_id} ({permission.value})")
+        return updated
+
+    def revoke_run_access(
+        self,
+        run_id: str,
+        user_id: str,
+    ) -> Run:
+        """Revoke a user's access to a run.
+
+        Args:
+            run_id: Run's unique identifier
+            user_id: User ID to revoke access from
+
+        Returns:
+            Updated Run
+
+        Raises:
+            RunNotFoundError: If run doesn't exist
+        """
+        run = self.run_store.get_by_id(run_id)
+        if run is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+
+        # Remove user from shared_with
+        run.shared_with = [
+            access
+            for access in run.shared_with
+            if not (access.type == AccessType.USER and access.id == user_id)
+        ]
+
+        # If no more shared users and visibility is shared, switch to private
+        if not run.shared_with and run.visibility == SharingMode.SHARED:
+            run.visibility = SharingMode.PRIVATE
+
+        updated = self.run_store.update(run_id, run)
+        if updated is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+
+        logger.info(f"Revoked user {user_id} access from run {run_id}")
+        return updated
+
+    def get_shared_users(self, run_id: str) -> list[RunSharedAccess]:
+        """Get list of users a run is shared with.
+
+        Args:
+            run_id: Run's unique identifier
+
+        Returns:
+            List of RunSharedAccess entries
+
+        Raises:
+            RunNotFoundError: If run doesn't exist
+        """
+        run = self.run_store.get_by_id(run_id)
+        if run is None:
+            raise RunNotFoundError(f"Run not found: {run_id}")
+
+        return [access for access in run.shared_with if access.type == AccessType.USER]
 
 
 # Global service instance

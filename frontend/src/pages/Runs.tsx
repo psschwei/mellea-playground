@@ -35,9 +35,10 @@ import {
   Collapse,
 } from '@chakra-ui/react';
 import { FiClock, FiSearch, FiTrash2, FiChevronDown, FiChevronRight, FiExternalLink, FiRefreshCw } from 'react-icons/fi';
-import { RunStatusBadge, RunPanel } from '@/components/Runs';
+import { RunStatusBadge, RunPanel, RunVisibilitySelector } from '@/components/Runs';
 import { runsApi, programsApi } from '@/api';
-import type { Run, ProgramAsset, RunExecutionStatus } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
+import type { Run, ProgramAsset, RunExecutionStatus, SharingMode } from '@/types';
 
 function formatDate(dateString?: string): string {
   if (!dateString) return '-';
@@ -58,11 +59,13 @@ interface RunFilters {
   status: RunExecutionStatus | 'all';
   programId: string;
   search: string;
+  visibility: SharingMode | 'all';
 }
 
 export function RunsPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
   const cancelBulkRef = useRef<HTMLButtonElement>(null);
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
 
@@ -74,6 +77,7 @@ export function RunsPage() {
     status: 'all',
     programId: '',
     search: '',
+    visibility: 'all',
   });
   const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
@@ -108,6 +112,7 @@ export function RunsPage() {
       const data = await runsApi.list({
         programId: filters.programId || undefined,
         status: filters.status !== 'all' ? filters.status : undefined,
+        visibility: filters.visibility !== 'all' ? filters.visibility : undefined,
       });
       setRuns(data);
     } catch (error) {
@@ -122,7 +127,13 @@ export function RunsPage() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [filters.programId, filters.status, toast]);
+  }, [filters.programId, filters.status, filters.visibility, toast]);
+
+  const handleRunVisibilityUpdate = (updatedRun: Run) => {
+    setRuns((prev) =>
+      prev.map((r) => (r.id === updatedRun.id ? updatedRun : r))
+    );
+  };
 
   useEffect(() => {
     loadPrograms();
@@ -317,6 +328,17 @@ export function RunsPage() {
           ))}
         </Select>
 
+        <Select
+          w="140px"
+          value={filters.visibility}
+          onChange={(e) => setFilters({ ...filters, visibility: e.target.value as RunFilters['visibility'] })}
+        >
+          <option value="all">All Visibility</option>
+          <option value="private">Private</option>
+          <option value="shared">Shared</option>
+          <option value="public">Public</option>
+        </Select>
+
         <InputGroup w="250px">
           <InputLeftElement pointerEvents="none">
             <Icon as={FiSearch} color="gray.400" />
@@ -328,11 +350,11 @@ export function RunsPage() {
           />
         </InputGroup>
 
-        {(filters.status !== 'all' || filters.programId || filters.search) && (
+        {(filters.status !== 'all' || filters.programId || filters.search || filters.visibility !== 'all') && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setFilters({ status: 'all', programId: '', search: '' })}
+            onClick={() => setFilters({ status: 'all', programId: '', search: '', visibility: 'all' })}
           >
             Clear filters
           </Button>
@@ -388,7 +410,7 @@ export function RunsPage() {
             No runs found
           </Text>
           <Text color="gray.400">
-            {filters.status !== 'all' || filters.programId || filters.search
+            {filters.status !== 'all' || filters.programId || filters.search || filters.visibility !== 'all'
               ? 'Try adjusting your filters'
               : 'Run a program to see executions here'}
           </Text>
@@ -412,6 +434,7 @@ export function RunsPage() {
                 <Th>Run ID</Th>
                 <Th>Program</Th>
                 <Th>Status</Th>
+                <Th>Visibility</Th>
                 <Th>Started</Th>
                 <Th>Duration</Th>
                 <Th>Exit Code</Th>
@@ -470,6 +493,16 @@ export function RunsPage() {
                       <Td>
                         <RunStatusBadge status={run.status} size="sm" />
                       </Td>
+                      <Td>
+                        {user && (
+                          <RunVisibilitySelector
+                            run={run}
+                            currentUserId={user.id}
+                            onUpdate={handleRunVisibilityUpdate}
+                            size="sm"
+                          />
+                        )}
+                      </Td>
                       <Td fontSize="sm">{formatDate(run.startedAt)}</Td>
                       <Td fontSize="sm">{formatDuration(run.metrics?.totalDurationMs)}</Td>
                       <Td fontSize="sm">{run.exitCode ?? '-'}</Td>
@@ -489,7 +522,7 @@ export function RunsPage() {
                     </Tr>
                     {isExpanded && (
                       <Tr key={`${run.id}-expanded`}>
-                        <Td colSpan={9} p={0} borderBottom="none">
+                        <Td colSpan={10} p={0} borderBottom="none">
                           <Collapse in={isExpanded} animateOpacity>
                             <Box p={4} bg="gray.50" borderBottomWidth={1}>
                               <RunPanel

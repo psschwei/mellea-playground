@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { Run, CreateRunRequest, RunExecutionStatus } from '@/types';
+import type { Run, CreateRunRequest, RunExecutionStatus, SharingMode, Permission } from '@/types';
 
 interface RunResponse {
   run: Run;
@@ -19,6 +19,27 @@ interface BulkDeleteResponse {
 interface ListRunsParams {
   programId?: string;
   status?: RunExecutionStatus;
+  visibility?: SharingMode;
+  includeShared?: boolean;
+}
+
+interface UpdateVisibilityRequest {
+  visibility: SharingMode;
+}
+
+interface ShareRunRequest {
+  userId: string;
+  permission?: Permission;
+}
+
+interface SharedUserResponse {
+  userId: string;
+  permission: Permission;
+}
+
+interface SharedUsersListResponse {
+  users: SharedUserResponse[];
+  total: number;
 }
 
 export const runsApi = {
@@ -131,5 +152,50 @@ export const runsApi = {
       runIds,
     });
     return response.data;
+  },
+
+  /**
+   * Update a run's visibility mode
+   * Only the run owner can change visibility
+   */
+  updateVisibility: async (id: string, visibility: SharingMode): Promise<Run> => {
+    const response = await apiClient.patch<RunResponse>(`/runs/${id}/visibility`, {
+      visibility,
+    } as UpdateVisibilityRequest);
+    return response.data.run;
+  },
+
+  /**
+   * Share a run with a specific user
+   * Only the run owner can share runs
+   */
+  shareWithUser: async (
+    id: string,
+    userId: string,
+    permission: Permission = 'view'
+  ): Promise<Run> => {
+    const response = await apiClient.post<RunResponse>(`/runs/${id}/share`, {
+      userId,
+      permission,
+    } as ShareRunRequest);
+    return response.data.run;
+  },
+
+  /**
+   * Revoke a user's access to a run
+   * Only the run owner can revoke access
+   */
+  revokeAccess: async (id: string, userId: string): Promise<Run> => {
+    const response = await apiClient.delete<RunResponse>(`/runs/${id}/share/${userId}`);
+    return response.data.run;
+  },
+
+  /**
+   * Get list of users a run is shared with
+   * Only the run owner can view this list
+   */
+  getSharedUsers: async (id: string): Promise<SharedUserResponse[]> => {
+    const response = await apiClient.get<SharedUsersListResponse>(`/runs/${id}/shared-users`);
+    return response.data.users;
   },
 };

@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from mellea_api.models.common import RunExecutionStatus
+from mellea_api.models.common import AccessType, Permission, RunExecutionStatus, SharingMode
 
 
 def generate_uuid() -> str:
@@ -42,6 +42,14 @@ def is_terminal_status(status: RunExecutionStatus) -> bool:
     }
 
 
+class RunSharedAccess(BaseModel):
+    """Access grant for a user to a run."""
+
+    type: AccessType
+    id: str
+    permission: Permission
+
+
 def can_transition(from_status: RunExecutionStatus, to_status: RunExecutionStatus) -> bool:
     """Check if a transition from one status to another is valid."""
     return to_status in VALID_RUN_TRANSITIONS.get(from_status, set())
@@ -61,6 +69,7 @@ class Run(BaseModel):
             programId="prog-456",
         )
         # run.status defaults to QUEUED
+        # run.visibility defaults to PRIVATE
         ```
 
     Attributes:
@@ -69,6 +78,8 @@ class Run(BaseModel):
         environment_id: ID of the Environment used for this run
         program_id: ID of the ProgramAsset being run
         status: Current execution status
+        visibility: Sharing mode (private, shared, public)
+        shared_with: Users this run is explicitly shared with
         job_name: Kubernetes Job name (set when job is created)
         exit_code: Process exit code (set on completion)
         error_message: Error details if failed
@@ -84,6 +95,15 @@ class Run(BaseModel):
     environment_id: str = Field(alias="environmentId")
     program_id: str = Field(alias="programId")
     status: RunExecutionStatus = RunExecutionStatus.QUEUED
+    visibility: SharingMode = Field(
+        default=SharingMode.PRIVATE,
+        description="Run visibility: private (owner only), shared (specific users), public (all users)",
+    )
+    shared_with: list[RunSharedAccess] = Field(
+        default_factory=list,
+        alias="sharedWith",
+        description="Users this run is shared with",
+    )
     job_name: str | None = Field(default=None, alias="jobName")
     exit_code: int | None = Field(default=None, alias="exitCode")
     error_message: str | None = Field(default=None, alias="errorMessage")
