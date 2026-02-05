@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ChakraProvider, extendTheme } from '@chakra-ui/react';
 import { AuthProvider } from '@/contexts';
 import { MainLayout, ProtectedRoute } from '@/components';
-import { LoginPage, RegisterPage, DashboardPage, ProgramsPage, ProgramDetailPage, CredentialsPage, RunsPage, RunDetailPage, CatalogPage, AssetDetailPage, ModelsPage, BuilderPage, CompositionsPage } from '@/pages';
+import { LoginPage, RegisterPage, DashboardPage, ProgramsPage, ProgramDetailPage, CredentialsPage, RunsPage, RunDetailPage, CatalogPage, AssetDetailPage, ModelsPage, BuilderPage, CompositionsPage, SharedWithMePage } from '@/pages';
 
 // Extend the default Chakra theme
 const theme = extendTheme({
@@ -77,6 +77,7 @@ export function App() {
               <Route path="/assets/:id" element={<AssetDetailPage />} />
               <Route path="/runs" element={<RunsPage />} />
               <Route path="/runs/:id" element={<RunDetailPage />} />
+              <Route path="/shared-with-me" element={<SharedWithMePage />} />
               <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
             </Route>
 

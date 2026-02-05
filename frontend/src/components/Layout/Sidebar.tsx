@@ -9,6 +9,7 @@ import {
   FiGitBranch,
   FiPlay,
   FiSettings,
+  FiShare2,
 } from 'react-icons/fi';
 import type { IconType } from 'react-icons';
 
@@ -74,6 +75,7 @@ export function Sidebar() {
         <NavItem to="/models" icon={FiCpu} label="Models" />
         <NavItem to="/compositions" icon={FiGitBranch} label="Compositions" />
         <NavItem to="/runs" icon={FiPlay} label="Runs" />
+        <NavItem to="/shared-with-me" icon={FiShare2} label="Shared with Me" />
 
         <Box pt={8}>
           <Text
