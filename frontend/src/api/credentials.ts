@@ -1,8 +1,11 @@
 import apiClient from './client';
 import type {
   Credential,
+  CredentialSharedAccess,
   CreateCredentialRequest,
   UpdateCredentialRequest,
+  ShareCredentialRequest,
+  ShareCredentialResponse,
   CredentialType,
   ModelProvider,
 } from '@/types';
@@ -58,5 +61,41 @@ export const credentialsApi = {
   validate: async (id: string): Promise<{ valid: boolean }> => {
     const response = await apiClient.post<{ valid: boolean }>(`/credentials/${id}/validate`);
     return response.data;
+  },
+
+  /**
+   * List credentials accessible to the current user (owned or shared)
+   */
+  listAccessible: async (params?: ListCredentialsParams): Promise<Credential[]> => {
+    const response = await apiClient.get<Credential[]>('/credentials/accessible', { params });
+    return response.data;
+  },
+
+  /**
+   * Share a credential with another user
+   */
+  share: async (id: string, data: ShareCredentialRequest): Promise<ShareCredentialResponse> => {
+    const response = await apiClient.post<ShareCredentialResponse>(
+      `/credentials/${id}/share`,
+      data,
+    );
+    return response.data;
+  },
+
+  /**
+   * List users who have access to a credential
+   */
+  listShares: async (id: string): Promise<CredentialSharedAccess[]> => {
+    const response = await apiClient.get<CredentialSharedAccess[]>(
+      `/credentials/${id}/shared-with`,
+    );
+    return response.data;
+  },
+
+  /**
+   * Revoke a user's access to a credential
+   */
+  revokeShare: async (credentialId: string, userId: string): Promise<void> => {
+    await apiClient.delete(`/credentials/${credentialId}/shared-with/${userId}`);
   },
 };

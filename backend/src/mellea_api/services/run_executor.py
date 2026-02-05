@@ -194,11 +194,21 @@ class RunExecutor:
             )
 
         # Validate all credentials before starting the run
+        # Use delegation-aware check so users can run shared programs with delegated credentials
         for cred_id in run.credential_ids:
-            credential = self.credential_service.get_credential(cred_id)
+            credential = self.credential_service.get_credential_with_delegation(
+                cred_id, run.owner_id
+            )
             if credential is None:
+                # Check if credential exists at all for better error message
+                existing = self.credential_service.get_credential(cred_id)
+                if existing is None:
+                    raise CredentialValidationError(
+                        f"Credential not found: {cred_id}"
+                    )
                 raise CredentialValidationError(
-                    f"Credential not found: {cred_id}"
+                    f"Credential not accessible: {cred_id}. "
+                    "The credential owner must share it with you to use it in runs."
                 )
             if credential.is_expired:
                 raise CredentialValidationError(

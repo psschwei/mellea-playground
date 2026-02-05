@@ -22,7 +22,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from mellea_api.core.config import Settings, get_settings
-from mellea_api.models.common import CredentialType, ModelProvider
+from mellea_api.models.common import CredentialType, ModelProvider, Permission
 from mellea_api.models.credential import Credential, CredentialUpdate
 
 if TYPE_CHECKING:
@@ -1371,6 +1371,248 @@ class CredentialService:
         # Generate K8s secret name using same logic as K8sSecretsBackend
         safe_id = hashlib.sha256(credential_id.encode()).hexdigest()[:8]
         return f"mellea-cred-{safe_id}"
+
+    def share_credential(
+        self,
+        credential_id: str,
+        user_id: str,
+        permission: Permission,
+        shared_by: str,
+    ) -> Credential:
+        """Share a credential with another user.
+
+        Args:
+            credential_id: Credential to share
+            user_id: User to share with
+            permission: Permission level (VIEW or RUN)
+            shared_by: User ID of who is sharing
+
+        Returns:
+            Updated Credential
+
+        Raises:
+            CredentialNotFoundError: If credential doesn't exist
+        """
+        from mellea_api.models.common import AccessType
+        from mellea_api.models.credential import CredentialSharedAccess
+
+        credential = self.backend.get(credential_id)
+        if credential is None:
+            raise CredentialNotFoundError(f"Credential not found: {credential_id}")
+
+        # Check if already shared with this user
+        for access in credential.shared_with:
+            if access.type == AccessType.USER and access.id == user_id:
+                # Update existing permission
+                access.permission = permission
+                # Save the updated credential
+                return self._save_credential_metadata(credential)
+
+        # Add new shared access
+        new_access = CredentialSharedAccess(
+            type=AccessType.USER,
+            id=user_id,
+            permission=permission,
+            sharedBy=shared_by,
+        )
+        credential.shared_with.append(new_access)
+
+        logger.info(
+            "Shared credential %s with user %s (permission: %s)",
+            credential_id,
+            user_id,
+            permission.value,
+        )
+        return self._save_credential_metadata(credential)
+
+    def revoke_credential_share(
+        self,
+        credential_id: str,
+        user_id: str,
+    ) -> Credential:
+        """Revoke a user's access to a credential.
+
+        Args:
+            credential_id: Credential to revoke access from
+            user_id: User to revoke access for
+
+        Returns:
+            Updated Credential
+
+        Raises:
+            CredentialNotFoundError: If credential doesn't exist
+        """
+        from mellea_api.models.common import AccessType
+
+        credential = self.backend.get(credential_id)
+        if credential is None:
+            raise CredentialNotFoundError(f"Credential not found: {credential_id}")
+
+        # Remove the user from shared_with
+        original_len = len(credential.shared_with)
+        credential.shared_with = [
+            access
+            for access in credential.shared_with
+            if not (access.type == AccessType.USER and access.id == user_id)
+        ]
+
+        if len(credential.shared_with) < original_len:
+            logger.info(
+                "Revoked credential %s access for user %s",
+                credential_id,
+                user_id,
+            )
+
+        return self._save_credential_metadata(credential)
+
+    def can_use_credential(
+        self,
+        credential_id: str,
+        user_id: str,
+    ) -> bool:
+        """Check if a user can use a credential (owner or delegated).
+
+        This checks if the user either owns the credential or has been
+        granted at least RUN permission via sharing.
+
+        Args:
+            credential_id: Credential to check
+            user_id: User to check access for
+
+        Returns:
+            True if user can use the credential, False otherwise
+        """
+        from mellea_api.models.common import AccessType, Permission
+
+        credential = self.backend.get(credential_id)
+        if credential is None:
+            return False
+
+        # Credentials without an owner are globally accessible (backward compatibility)
+        if credential.owner_id is None:
+            return True
+
+        # Owner can always use
+        if credential.owner_id == user_id:
+            return True
+
+        # Check shared_with list for RUN or higher permission
+        for access in credential.shared_with:
+            if (
+                access.type == AccessType.USER
+                and access.id == user_id
+                and access.permission in (Permission.RUN, Permission.EDIT)
+            ):
+                return True
+
+        return False
+
+    def get_credential_with_delegation(
+        self,
+        credential_id: str,
+        user_id: str,
+    ) -> Credential | None:
+        """Get a credential if the user can access it (owner or delegated).
+
+        Args:
+            credential_id: Credential to get
+            user_id: User requesting access
+
+        Returns:
+            Credential if accessible, None otherwise
+        """
+        if not self.can_use_credential(credential_id, user_id):
+            return None
+        return self.backend.get(credential_id)
+
+    def list_accessible_credentials(
+        self,
+        user_id: str,
+        credential_type: CredentialType | None = None,
+        provider: str | None = None,
+    ) -> list[Credential]:
+        """List credentials accessible to a user (owned or shared).
+
+        Args:
+            user_id: User to list credentials for
+            credential_type: Optional filter by type
+            provider: Optional filter by provider
+
+        Returns:
+            List of accessible credentials
+        """
+        from mellea_api.models.common import AccessType
+
+        # Get all credentials (no owner filter)
+        all_credentials = self.backend.list_all(
+            owner_id=None,
+            credential_type=credential_type,
+            provider=provider,
+        )
+
+        accessible = []
+        for cred in all_credentials:
+            # Include if owned
+            if cred.owner_id == user_id:
+                accessible.append(cred)
+                continue
+
+            # Include if shared with user
+            for access in cred.shared_with:
+                if access.type == AccessType.USER and access.id == user_id:
+                    accessible.append(cred)
+                    break
+
+        return accessible
+
+    def _save_credential_metadata(self, credential: Credential) -> Credential:
+        """Save credential metadata changes (shared_with, etc.).
+
+        This is a helper that updates the credential's metadata without
+        changing the secret data.
+
+        Args:
+            credential: Credential with updated metadata
+
+        Returns:
+            Updated credential
+        """
+        credential.updated_at = datetime.utcnow()
+
+        # Use backend-specific update mechanism
+        if isinstance(self.backend, EncryptedFileBackend):
+            # For file backend, read/modify/write the metadata
+            with self.backend._lock:
+                data = self.backend._read_metadata()
+                for i, cred_data in enumerate(data["credentials"]):
+                    if cred_data.get("id") == credential.id:
+                        data["credentials"][i] = credential.model_dump(
+                            mode="json", by_alias=True
+                        )
+                        break
+                self.backend._write_metadata(data)
+        elif isinstance(self.backend, K8sSecretsBackend):
+            # For K8s backend, update the annotation
+            from kubernetes.client.exceptions import ApiException
+
+            try:
+                secret = self.backend._core_api.read_namespaced_secret(
+                    name=self.backend._secret_name(credential.id),
+                    namespace=self.backend._namespace,
+                )
+                secret.metadata.annotations["mellea.io/metadata"] = (
+                    credential.model_dump_json(by_alias=True)
+                )
+                self.backend._core_api.replace_namespaced_secret(
+                    name=self.backend._secret_name(credential.id),
+                    namespace=self.backend._namespace,
+                    body=secret,
+                )
+            except ApiException as e:
+                logger.error(f"Failed to update K8s Secret metadata: {e}")
+                raise RuntimeError(f"Failed to update credential: {e.reason}") from e
+
+        return credential
 
 
 # Global service instance

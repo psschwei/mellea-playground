@@ -182,6 +182,14 @@ export type ModelProvider =
   | 'azure'
   | 'custom';
 
+export interface CredentialSharedAccess {
+  type: AccessType;
+  id: string;
+  permission: Permission;
+  sharedAt: string;
+  sharedBy: string;
+}
+
 export interface Credential {
   id: string;
   name: string;
@@ -189,6 +197,7 @@ export interface Credential {
   type: CredentialType;
   provider?: ModelProvider | string;
   ownerId?: string;
+  sharedWith?: CredentialSharedAccess[];
   tags: string[];
   createdAt: string;
   updatedAt: string;
@@ -213,6 +222,19 @@ export interface UpdateCredentialRequest {
   secretData?: Record<string, string>;
   tags?: string[];
   expiresAt?: string;
+}
+
+export interface ShareCredentialRequest {
+  userId: string;
+  permission: Permission;
+}
+
+export interface ShareCredentialResponse {
+  credentialId: string;
+  userId: string;
+  permission: Permission;
+  sharedAt: string;
+  sharedBy: string;
 }
 
 // Log streaming types
@@ -390,6 +412,7 @@ export type AssetType = 'program' | 'model' | 'composition';
 // Sharing types
 export type Permission = 'view' | 'run' | 'edit';
 export type ResourceType = 'program' | 'model' | 'composition';
+export type AccessType = 'user' | 'group' | 'org';
 
 export interface ShareLink {
   id: string;
