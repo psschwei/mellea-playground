@@ -76,6 +76,18 @@ class EnvironmentBuilderService:
     DEPS_IMAGE_PREFIX = "mellea-deps"
     PROGRAM_IMAGE_PREFIX = "mellea-prog"
 
+    # Default mellea package version for program environments
+    MELLEA_VERSION = "0.3.0"
+
+    # Mapping from backend providers to mellea extras
+    BACKEND_TO_MELLEA_EXTRA: dict[str, str] = {
+        "ollama": "ollama",
+        "openai": "openai",
+        "watsonx": "watsonx",
+        "hf": "hf",
+        "litellm": "litellm",
+    }
+
     def __init__(
         self,
         settings: Settings | None = None,
@@ -158,6 +170,51 @@ class EnvironmentBuilderService:
             "version": pkg.version or "",
             "extras": sorted(pkg.extras) if pkg.extras else [],
         }
+
+    def ensure_mellea_dependency(
+        self,
+        deps: DependencySpec,
+        backend: str | None = None,
+    ) -> DependencySpec:
+        """Ensure mellea is included in the dependency spec.
+
+        If mellea is not already in the packages list, adds it with the
+        appropriate extras for the specified backend.
+
+        Args:
+            deps: The original dependency specification
+            backend: Optional backend name to determine mellea extras
+
+        Returns:
+            Updated DependencySpec with mellea included
+        """
+        from mellea_api.models.assets import PackageRef
+
+        # Check if mellea is already in packages
+        mellea_present = any(pkg.name.lower() == "mellea" for pkg in deps.packages)
+
+        if mellea_present:
+            return deps
+
+        # Determine extras based on backend
+        extras: list[str] = []
+        if backend and backend.lower() in self.BACKEND_TO_MELLEA_EXTRA:
+            extras.append(self.BACKEND_TO_MELLEA_EXTRA[backend.lower()])
+
+        # Create mellea package reference
+        mellea_pkg = PackageRef(
+            name="mellea",
+            version=self.MELLEA_VERSION,
+            extras=extras,
+        )
+
+        # Create new DependencySpec with mellea added
+        return DependencySpec(
+            source=deps.source,
+            packages=[mellea_pkg, *deps.packages],
+            pythonVersion=deps.python_version,
+            lockfileHash=deps.lockfile_hash,
+        )
 
     def compute_packages_hash(self, deps: DependencySpec) -> str:
         """Compute a quick hash of just the package names for comparison."""
@@ -427,18 +484,25 @@ class EnvironmentBuilderService:
         self,
         deps: DependencySpec,
         python_version: str | None = None,
+        backend: str | None = None,
     ) -> tuple[str, str]:
         """Generate a Dockerfile for the dependency layer.
+
+        Automatically injects mellea as a dependency if not already present.
 
         Args:
             deps: The dependency specification
             python_version: Python version override
+            backend: Optional backend name to determine mellea extras
 
         Returns:
             Tuple of (Dockerfile content, requirements.txt content)
         """
         py_version = python_version or deps.python_version or self.DEFAULT_PYTHON_VERSION
         base_image = self.BASE_IMAGES.get(py_version, self.BASE_IMAGES[self.DEFAULT_PYTHON_VERSION])
+
+        # Ensure mellea is in dependencies
+        deps = self.ensure_mellea_dependency(deps, backend=backend)
 
         requirements_lines = []
         for pkg in deps.packages:
@@ -509,6 +573,7 @@ CMD ["python", "{program.entrypoint}"]
         self,
         program: ProgramAsset,
         workspace_path: Path,
+        backend: str | None = None,
     ) -> BuildResult:
         """Build a Docker image using Kaniko in Kubernetes.
 
@@ -518,6 +583,7 @@ CMD ["python", "{program.entrypoint}"]
         Args:
             program: The program to build an image for
             workspace_path: Path to the program's workspace directory
+            backend: Optional LLM backend name to determine mellea extras
 
         Returns:
             BuildResult with job info (build runs asynchronously)
@@ -527,7 +593,7 @@ CMD ["python", "{program.entrypoint}"]
         kaniko_service = get_kaniko_build_service()
 
         # Generate the combined Dockerfile (deps + program in one)
-        dockerfile_content = self._generate_kaniko_dockerfile(program)
+        dockerfile_content = self._generate_kaniko_dockerfile(program, backend=backend)
 
         # Read workspace files for build context
         context_files: dict[str, str] = {}
@@ -560,14 +626,21 @@ CMD ["python", "{program.entrypoint}"]
             image_tag=image_tag,
         )
 
-    def _generate_kaniko_dockerfile(self, program: ProgramAsset) -> str:
+    def _generate_kaniko_dockerfile(
+        self,
+        program: ProgramAsset,
+        backend: str | None = None,
+    ) -> str:
         """Generate a single-stage Dockerfile for Kaniko builds.
 
         Unlike the two-layer Docker approach, Kaniko builds use a single
         Dockerfile that installs dependencies and copies source code.
 
+        Automatically injects mellea as a dependency if not already present.
+
         Args:
             program: The program to build
+            backend: Optional backend name to determine mellea extras
 
         Returns:
             Dockerfile content as string
@@ -575,9 +648,12 @@ CMD ["python", "{program.entrypoint}"]
         py_version = program.dependencies.python_version or self.DEFAULT_PYTHON_VERSION
         base_image = self.BASE_IMAGES.get(py_version, self.BASE_IMAGES[self.DEFAULT_PYTHON_VERSION])
 
+        # Ensure mellea is in dependencies
+        deps = self.ensure_mellea_dependency(program.dependencies, backend=backend)
+
         # Generate requirements list
         requirements_lines = []
-        for pkg in program.dependencies.packages:
+        for pkg in deps.packages:
             line = pkg.name
             if pkg.extras:
                 line += f"[{','.join(pkg.extras)}]"
@@ -617,6 +693,7 @@ CMD ["python", "{program.entrypoint}"]
         workspace_path: Path,
         force_rebuild: bool = False,
         push: bool = False,
+        backend: str | None = None,
     ) -> BuildResult:
         """Build a Docker image for a program with layer caching.
 
@@ -628,13 +705,15 @@ CMD ["python", "{program.entrypoint}"]
             workspace_path: Path to the program's workspace directory
             force_rebuild: If True, skip cache lookup
             push: If True, push the built images to the registry after build
+            backend: Optional LLM backend name (e.g., 'ollama', 'openai') to
+                determine which mellea extras to install
 
         Returns:
             BuildResult with success status and details
         """
         # Route to Kaniko backend if configured
         if self.settings.build_backend == "kaniko":
-            return self._build_with_kaniko(program, workspace_path)
+            return self._build_with_kaniko(program, workspace_path, backend=backend)
 
         # Use Docker backend (default)
         start_time = time.time()
@@ -643,7 +722,10 @@ CMD ["python", "{program.entrypoint}"]
         try:
             # STAGE: Preparing
             context.stage = BuildStage.PREPARING
-            cache_key = self.compute_cache_key(program.dependencies)
+
+            # Ensure mellea is in dependencies (affects cache key)
+            deps_with_mellea = self.ensure_mellea_dependency(program.dependencies, backend=backend)
+            cache_key = self.compute_cache_key(deps_with_mellea)
             context.cache_key = cache_key
             logger.info(f"Build started for {program.id}, cache_key={cache_key[:12]}...")
 
@@ -663,7 +745,7 @@ CMD ["python", "{program.entrypoint}"]
             if deps_image_tag is None:
                 context.stage = BuildStage.BUILDING_DEPS
                 deps_image_tag = self._build_dependency_layer(
-                    program.dependencies, cache_key, context
+                    deps_with_mellea, cache_key, context
                 )
                 # Push dependency layer to registry if requested
                 if push:

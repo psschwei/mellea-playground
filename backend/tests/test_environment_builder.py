@@ -82,6 +82,70 @@ def sample_program(sample_deps: DependencySpec):
     )
 
 
+class TestMelleaDependencyInjection:
+    """Tests for mellea dependency injection."""
+
+    def test_ensure_mellea_dependency_adds_mellea(
+        self, builder_service: EnvironmentBuilderService, sample_deps: DependencySpec
+    ):
+        """Test that mellea is added when not present."""
+        result = builder_service.ensure_mellea_dependency(sample_deps)
+
+        mellea_pkg = next(
+            (pkg for pkg in result.packages if pkg.name == "mellea"), None
+        )
+        assert mellea_pkg is not None
+        assert mellea_pkg.version == builder_service.MELLEA_VERSION
+
+    def test_ensure_mellea_dependency_preserves_existing(
+        self, builder_service: EnvironmentBuilderService
+    ):
+        """Test that existing mellea dependency is preserved."""
+        deps_with_mellea = DependencySpec(
+            source=DependencySource.PYPROJECT,
+            packages=[
+                PackageRef(name="mellea", version="0.2.0", extras=["custom"]),
+                PackageRef(name="requests", version="2.31.0"),
+            ],
+            pythonVersion="3.12",
+        )
+
+        result = builder_service.ensure_mellea_dependency(deps_with_mellea)
+
+        # Should not add another mellea
+        mellea_pkgs = [pkg for pkg in result.packages if pkg.name.lower() == "mellea"]
+        assert len(mellea_pkgs) == 1
+        # Should preserve original version
+        assert mellea_pkgs[0].version == "0.2.0"
+
+    def test_ensure_mellea_dependency_adds_backend_extras(
+        self, builder_service: EnvironmentBuilderService, sample_deps: DependencySpec
+    ):
+        """Test that backend-specific extras are added."""
+        result = builder_service.ensure_mellea_dependency(sample_deps, backend="ollama")
+
+        mellea_pkg = next(
+            (pkg for pkg in result.packages if pkg.name == "mellea"), None
+        )
+        assert mellea_pkg is not None
+        assert "ollama" in mellea_pkg.extras
+
+    def test_ensure_mellea_dependency_handles_unknown_backend(
+        self, builder_service: EnvironmentBuilderService, sample_deps: DependencySpec
+    ):
+        """Test that unknown backends don't cause errors."""
+        result = builder_service.ensure_mellea_dependency(
+            sample_deps, backend="unknown_backend"
+        )
+
+        mellea_pkg = next(
+            (pkg for pkg in result.packages if pkg.name == "mellea"), None
+        )
+        assert mellea_pkg is not None
+        # No extras for unknown backend
+        assert len(mellea_pkg.extras) == 0
+
+
 class TestCacheKeyComputation:
     """Tests for cache key computation."""
 
@@ -391,14 +455,15 @@ class TestBuildImage:
         (workspace_path / "src").mkdir()
         (workspace_path / "src" / "main.py").write_text("print('hello')")
 
-        # Pre-populate cache
-        cache_key = builder_service.compute_cache_key(sample_deps)
+        # Pre-populate cache - need to include mellea since build_image injects it
+        deps_with_mellea = builder_service.ensure_mellea_dependency(sample_deps)
+        cache_key = builder_service.compute_cache_key(deps_with_mellea)
         deps_image_tag = f"mellea-deps:{cache_key[:12]}"
 
         builder_service.create_cache_entry(
             cache_key=cache_key,
             image_tag=deps_image_tag,
-            deps=sample_deps,
+            deps=deps_with_mellea,
         )
 
         # Mock Docker - image exists
@@ -796,13 +861,14 @@ class TestRegistryOperations:
         (workspace_path / "src").mkdir()
         (workspace_path / "src" / "main.py").write_text("print('hello')")
 
-        # Pre-populate cache
-        cache_key = builder_with_registry.compute_cache_key(sample_deps)
+        # Pre-populate cache - need to include mellea since build_image injects it
+        deps_with_mellea = builder_with_registry.ensure_mellea_dependency(sample_deps)
+        cache_key = builder_with_registry.compute_cache_key(deps_with_mellea)
         deps_image_tag = f"mellea-deps:{cache_key[:12]}"
         builder_with_registry.create_cache_entry(
             cache_key=cache_key,
             image_tag=deps_image_tag,
-            deps=sample_deps,
+            deps=deps_with_mellea,
         )
 
         # Mock Docker
