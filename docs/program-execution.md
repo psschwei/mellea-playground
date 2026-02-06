@@ -2,12 +2,37 @@
 
 This guide explains how to run Python programs in isolated containers using the Mellea Playground execution system.
 
+> **Compatibility**: This guide covers mellea 0.3.0 programs. See [Migration Guide](./migration-guide.md) for upgrading from earlier versions.
+
 ## Overview
 
 The program execution system provides a complete pipeline for running user programs:
 
 ```
 Program Asset → Environment Build → Image Registry → K8s Job → Run Tracking
+```
+
+### Mellea Runtime Integration
+
+Programs run with the **MelleaRuntime** adapter that bridges the playground to mellea 0.3.0:
+
+```python
+from mellea_api.runtime import MelleaRuntime
+
+# Runtime is automatically configured from environment
+runtime = MelleaRuntime(backend='ollama', model_id='granite4:micro')
+
+# Chat interaction
+response = runtime.chat("What is 2+2?")
+
+# Structured generation
+result = runtime.instruct(
+    "Generate a JSON config",
+    requirements=["Must be valid JSON"]
+)
+
+# Execute @generative slots
+output = runtime.execute_slot('my_program.slots', 'summarize', text="...")
 ```
 
 ### Key Components

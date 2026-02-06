@@ -2,7 +2,9 @@
 
 > **Note:** This project is in active development. Features and APIs may change.
 
-A centralized GUI playground for cataloging, running, and composing [mellea](https://github.com/generative-computing/mellea) programs across multiple LLMs.
+A centralized GUI playground for cataloging, running, and composing [mellea](https://github.com/ibm-granite/mellea) programs across multiple LLMs.
+
+**Compatibility:** mellea >= 0.3.0 | Python >= 3.11
 
 ## What is this?
 

@@ -9,8 +9,21 @@ Documentation for the Mellea Playground program execution platform.
 | [Quickstart](./quickstart.md) | Get started in minutes |
 | [Program Execution](./program-execution.md) | Detailed guide to running programs |
 | [API Reference](./api-reference.md) | REST API documentation |
+| [Backend Configuration](./backend-configuration.md) | Configure LLM backends (Ollama, OpenAI, WatsonX) |
+| [Migration Guide](./migration-guide.md) | Migrating from pre-0.3.0 mellea |
 | [Deploy to OpenShift](./deploy-openshift.md) | OpenShift deployment guide |
 | [Secrets Storage](./secrets-storage.md) | Credentials and secrets management |
+
+## Mellea 0.3.0
+
+The playground is compatible with **mellea >= 0.3.0**. Key features:
+
+- **Unified session API**: `start_session(backend_name, model_id)`
+- **Multi-backend support**: Ollama, OpenAI, WatsonX, HuggingFace, LiteLLM
+- **`@generative` decorator**: Mark functions as AI-powered slots
+- **Validation & sampling**: Requirements-based output validation
+
+For detailed API coverage, see [Mellea 0.3.0 API Reference](./mellea-0.3.0-api-reference.md).
 
 ## Architecture Overview
 

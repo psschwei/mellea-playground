@@ -7,6 +7,7 @@ Get started running Python programs in Mellea Playground in minutes.
 - Kubernetes cluster with `kubectl` configured
 - Docker installed (for local builds)
 - Python 3.11+
+- mellea >= 0.3.0 (automatically injected into program environments)
 
 ## Step 1: Start the API Server
 
@@ -64,7 +65,50 @@ print(f"Created program: {program.id}")
 
 ## Step 3: Add Program Code
 
-Write your Python code to the workspace:
+Write your Python code to the workspace. The playground supports mellea 0.3.0 programs with `@generative` slots:
+
+### Using mellea 0.3.0 API
+
+```python
+# main.py - A simple mellea 0.3.0 program
+from mellea import start_session, generative
+
+
+@generative
+def summarize(text: str, max_words: int = 50) -> str:
+    """Summarize the given text concisely.
+
+    Args:
+        text: The text to summarize
+        max_words: Maximum words in summary
+
+    Returns:
+        A concise summary
+    """
+    ...
+
+
+def main():
+    # Create session with Ollama backend
+    session = start_session(backend_name='ollama', model_id='granite4:micro')
+
+    # Simple chat
+    response = session.chat("What is the capital of France?")
+    print(f"Chat response: {response.content}")
+
+    # Instruction-based generation with validation
+    result = session.instruct(
+        "Generate a haiku about programming",
+        requirements=["Must have exactly 3 lines", "Follow 5-7-5 syllable pattern"]
+    )
+    print(f"Generated haiku: {result}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### Simple Example (without mellea)
 
 ```python
 # Using the SDK
