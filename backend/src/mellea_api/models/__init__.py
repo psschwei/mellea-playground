@@ -24,15 +24,6 @@ from mellea_api.models.audit import (
     AuditEventListResponse,
     AuditResourceType,
 )
-from mellea_api.models.notification import (
-    Notification,
-    NotificationCreateRequest,
-    NotificationListResponse,
-    NotificationPriority,
-    NotificationType,
-    NotificationUpdateRequest,
-    WebSocketMessage,
-)
 from mellea_api.models.build import (
     BuildContext,
     BuildResult,
@@ -49,6 +40,15 @@ from mellea_api.models.common import (
     SharingMode,
 )
 from mellea_api.models.environment import Environment, ResourceLimits
+from mellea_api.models.notification import (
+    Notification,
+    NotificationCreateRequest,
+    NotificationListResponse,
+    NotificationPriority,
+    NotificationType,
+    NotificationUpdateRequest,
+    WebSocketMessage,
+)
 from mellea_api.models.permission import (
     AccessControlEntry,
     PermissionCheck,

@@ -12,12 +12,6 @@ from mellea_api.services.audit import (
     get_audit_service,
     reset_audit_service,
 )
-from mellea_api.services.notification import (
-    ConnectionManager,
-    NotificationService,
-    get_notification_service,
-    reset_notification_service,
-)
 from mellea_api.services.auth import (
     AuthenticationError,
     AuthService,
@@ -75,6 +69,12 @@ from mellea_api.services.model_pricing import (
     ModelPrice,
     ModelPricing,
     get_model_pricing,
+)
+from mellea_api.services.notification import (
+    ConnectionManager,
+    NotificationService,
+    get_notification_service,
+    reset_notification_service,
 )
 from mellea_api.services.permission import (
     PermissionDeniedError,
