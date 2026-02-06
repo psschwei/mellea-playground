@@ -11,8 +11,10 @@ from mellea_api.core.config import Settings, get_settings
 from mellea_api.core.store import JsonStore
 from mellea_api.models.notification import (
     Notification,
+    NotificationPreferences,
     NotificationPriority,
     NotificationType,
+    NotificationTypePreference,
 )
 
 logger = logging.getLogger(__name__)
@@ -164,6 +166,7 @@ class NotificationService:
         """
         self.settings = settings or get_settings()
         self._store: JsonStore[Notification] | None = None
+        self._preferences_store: JsonStore[NotificationPreferences] | None = None
         self.connection_manager = ConnectionManager()
 
     @property
@@ -177,6 +180,18 @@ class NotificationService:
                 model_class=Notification,
             )
         return self._store
+
+    @property
+    def preferences_store(self) -> JsonStore[NotificationPreferences]:
+        """Get the preferences store, initializing if needed."""
+        if self._preferences_store is None:
+            file_path = self.settings.data_dir / "metadata" / "notification_preferences.json"
+            self._preferences_store = JsonStore[NotificationPreferences](
+                file_path=file_path,
+                collection_key="preferences",
+                model_class=NotificationPreferences,
+            )
+        return self._preferences_store
 
     async def create_notification(
         self,
@@ -395,6 +410,68 @@ class NotificationService:
             )
 
         return count
+
+    def get_preferences(self, user_id: str) -> NotificationPreferences:
+        """Get notification preferences for a user.
+
+        Creates default preferences if none exist.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            User's notification preferences
+        """
+        prefs = self.preferences_store.get_by_id(user_id)
+        if prefs is None:
+            # Create default preferences with all types enabled
+            prefs = NotificationPreferences(user_id=user_id)
+            # Initialize with default preferences for all notification types
+            for ntype in NotificationType:
+                prefs.type_preferences[ntype.value] = NotificationTypePreference()
+            self.preferences_store.create(prefs)
+            logger.debug(f"Created default preferences for user {user_id}")
+        return prefs
+
+    def update_preferences(
+        self,
+        user_id: str,
+        global_enabled: bool | None = None,
+        quiet_hours_start: str | None = None,
+        quiet_hours_end: str | None = None,
+        type_preferences: dict[str, NotificationTypePreference] | None = None,
+    ) -> NotificationPreferences:
+        """Update notification preferences for a user.
+
+        Args:
+            user_id: User ID
+            global_enabled: Master switch for all notifications
+            quiet_hours_start: Start of quiet hours
+            quiet_hours_end: End of quiet hours
+            type_preferences: Per-type settings to update (merged with existing)
+
+        Returns:
+            Updated preferences
+        """
+        prefs = self.get_preferences(user_id)
+
+        if global_enabled is not None:
+            prefs.global_enabled = global_enabled
+
+        if quiet_hours_start is not None:
+            prefs.quiet_hours_start = quiet_hours_start if quiet_hours_start else None
+
+        if quiet_hours_end is not None:
+            prefs.quiet_hours_end = quiet_hours_end if quiet_hours_end else None
+
+        if type_preferences is not None:
+            # Merge with existing preferences
+            for ntype, pref in type_preferences.items():
+                prefs.type_preferences[ntype] = pref
+
+        self.preferences_store.update(user_id, prefs)
+        logger.info(f"Updated notification preferences for user {user_id}")
+        return prefs
 
 
 # Global service instance

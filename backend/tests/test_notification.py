@@ -1,6 +1,5 @@
 """Tests for notification service with WebSocket push support."""
 
-from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -428,3 +427,90 @@ class TestNotificationPriority:
         )
 
         assert notification.priority == NotificationPriority.LOW
+
+
+class TestNotificationPreferences:
+    """Tests for notification preferences."""
+
+    def test_get_default_preferences(self, notification_service):
+        """Test getting preferences creates defaults if not set."""
+        prefs = notification_service.get_preferences("user-1")
+
+        assert prefs.user_id == "user-1"
+        assert prefs.global_enabled is True
+        assert prefs.quiet_hours_start is None
+        assert prefs.quiet_hours_end is None
+        # Default preferences for all notification types should exist
+        for ntype in NotificationType:
+            assert ntype.value in prefs.type_preferences
+
+    def test_update_global_enabled(self, notification_service):
+        """Test updating global enabled setting."""
+        prefs = notification_service.update_preferences("user-1", global_enabled=False)
+
+        assert prefs.global_enabled is False
+
+        # Verify persistence
+        prefs = notification_service.get_preferences("user-1")
+        assert prefs.global_enabled is False
+
+    def test_update_quiet_hours(self, notification_service):
+        """Test updating quiet hours."""
+        prefs = notification_service.update_preferences(
+            "user-1",
+            quiet_hours_start="22:00",
+            quiet_hours_end="08:00"
+        )
+
+        assert prefs.quiet_hours_start == "22:00"
+        assert prefs.quiet_hours_end == "08:00"
+
+    def test_update_type_preferences(self, notification_service):
+        """Test updating per-type preferences."""
+        from mellea_api.models.notification import NotificationTypePreference
+
+        type_prefs = {
+            NotificationType.RUN_COMPLETED.value: NotificationTypePreference(
+                enabled=True,
+                pushEnabled=True,
+                emailEnabled=True
+            ),
+            NotificationType.RUN_FAILED.value: NotificationTypePreference(
+                enabled=True,
+                pushEnabled=True,
+                emailEnabled=True
+            )
+        }
+
+        prefs = notification_service.update_preferences(
+            "user-1",
+            type_preferences=type_prefs
+        )
+
+        assert prefs.type_preferences[NotificationType.RUN_COMPLETED.value].email_enabled is True
+        assert prefs.type_preferences[NotificationType.RUN_FAILED.value].email_enabled is True
+
+    def test_should_send(self, notification_service):
+        """Test should_send respects preferences."""
+        prefs = notification_service.get_preferences("user-1")
+
+        # Should send by default
+        assert prefs.should_send(NotificationType.RUN_COMPLETED) is True
+
+        # Disable globally
+        prefs = notification_service.update_preferences("user-1", global_enabled=False)
+        assert prefs.should_send(NotificationType.RUN_COMPLETED) is False
+
+    def test_should_push(self, notification_service):
+        """Test should_push respects preferences."""
+        prefs = notification_service.get_preferences("user-1")
+
+        # Should push by default
+        assert prefs.should_push(NotificationType.RUN_COMPLETED) is True
+
+    def test_should_email(self, notification_service):
+        """Test should_email respects preferences."""
+        prefs = notification_service.get_preferences("user-1")
+
+        # Should not email by default
+        assert prefs.should_email(NotificationType.RUN_COMPLETED) is False

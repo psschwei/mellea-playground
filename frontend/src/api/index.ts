@@ -7,6 +7,7 @@ export { compositionRunsApi } from './compositionRuns';
 export { credentialsApi } from './credentials';
 export { githubImportApi } from './github-import';
 export { modelsApi } from './models';
+export { notificationsApi } from './notifications';
 export { programsApi } from './programs';
 export { runsApi } from './runs';
 

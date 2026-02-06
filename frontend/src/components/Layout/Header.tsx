@@ -11,10 +11,12 @@ import {
   Text,
   Avatar,
   useColorModeValue,
+  useDisclosure,
 } from '@chakra-ui/react';
 import { FiBell, FiChevronDown, FiLogOut, FiSettings, FiUser } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks';
+import { NotificationPreferencesModal } from '@/components/Notifications';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -25,6 +27,11 @@ export function Header({ onMenuClick: _onMenuClick }: HeaderProps) {
   const navigate = useNavigate();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const {
+    isOpen: isPrefsOpen,
+    onOpen: onPrefsOpen,
+    onClose: onPrefsClose,
+  } = useDisclosure();
 
   const handleLogout = async () => {
     await logout();
@@ -70,7 +77,9 @@ export function Header({ onMenuClick: _onMenuClick }: HeaderProps) {
             </MenuButton>
             <MenuList>
               <MenuItem icon={<FiUser />}>Profile</MenuItem>
-              <MenuItem icon={<FiSettings />}>Settings</MenuItem>
+              <MenuItem icon={<FiSettings />} onClick={onPrefsOpen}>
+                Notification Settings
+              </MenuItem>
               <MenuDivider />
               <MenuItem icon={<FiLogOut />} onClick={handleLogout}>
                 Logout
@@ -79,6 +88,8 @@ export function Header({ onMenuClick: _onMenuClick }: HeaderProps) {
           </Menu>
         </HStack>
       </Flex>
+
+      <NotificationPreferencesModal isOpen={isPrefsOpen} onClose={onPrefsClose} />
     </Box>
   );
 }

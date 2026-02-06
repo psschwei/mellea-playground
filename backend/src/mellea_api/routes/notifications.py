@@ -12,6 +12,8 @@ from mellea_api.models.notification import (
     Notification,
     NotificationCreateRequest,
     NotificationListResponse,
+    NotificationPreferences,
+    NotificationPreferencesUpdateRequest,
     NotificationType,
     NotificationUpdateRequest,
 )
@@ -122,6 +124,42 @@ async def delete_notification(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Notification not found",
         )
+
+
+# Preferences endpoints
+preferences_router = APIRouter(prefix="/api/v1/notifications/preferences", tags=["notification-preferences"])
+
+
+@preferences_router.get("", response_model=NotificationPreferences)
+async def get_notification_preferences(
+    current_user: CurrentUser,
+    notification_service: NotificationServiceDep,
+) -> NotificationPreferences:
+    """Get notification preferences for the current user.
+
+    Returns default preferences if none have been set.
+    """
+    return notification_service.get_preferences(current_user.id)
+
+
+@preferences_router.put("", response_model=NotificationPreferences)
+async def update_notification_preferences(
+    update: NotificationPreferencesUpdateRequest,
+    current_user: CurrentUser,
+    notification_service: NotificationServiceDep,
+) -> NotificationPreferences:
+    """Update notification preferences for the current user.
+
+    Only specified fields will be updated. Type preferences are merged
+    with existing preferences (not replaced entirely).
+    """
+    return notification_service.update_preferences(
+        user_id=current_user.id,
+        global_enabled=update.global_enabled,
+        quiet_hours_start=update.quiet_hours_start,
+        quiet_hours_end=update.quiet_hours_end,
+        type_preferences=update.type_preferences,
+    )
 
 
 # Admin endpoints for creating system notifications

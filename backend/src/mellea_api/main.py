@@ -24,6 +24,7 @@ from mellea_api.routes import (
     health_router,
     llm_metrics_router,
     notifications_admin_router,
+    notifications_preferences_router,
     notifications_router,
     notifications_ws_router,
     retention_router,
@@ -127,6 +128,7 @@ def create_app() -> FastAPI:
     app.include_router(retention_router)
     app.include_router(llm_metrics_router)
     app.include_router(notifications_router)
+    app.include_router(notifications_preferences_router)
     app.include_router(notifications_admin_router)
     app.include_router(notifications_ws_router)
     app.include_router(controller_router)
