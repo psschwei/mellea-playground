@@ -49,8 +49,9 @@ class ProgramValidator:
         "src/app.py",
     ]
 
-    # Mellea decorators to detect
-    MELLEA_DECORATORS = ["generative", "verifier", "requirement"]
+    # Mellea decorators to detect (mellea 0.3.0)
+    # Note: @generative is the primary decorator for defining generative slots
+    MELLEA_DECORATORS = ["generative"]
 
     def detect_entrypoint(self, project_path: Path) -> str | None:
         """Find the likely entrypoint script in a directory.
