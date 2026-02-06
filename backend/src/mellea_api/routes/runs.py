@@ -13,6 +13,8 @@ from sse_starlette.sse import EventSourceResponse
 from mellea_api.core.deps import CurrentUser, CurrentUserSSE
 from mellea_api.models.common import ImageBuildStatus, Permission, RunExecutionStatus, SharingMode
 from mellea_api.models.run import Run
+from mellea_api.models.run_audit import RunAuditAction
+from mellea_api.services.run_audit import RunAuditService, get_run_audit_service
 from mellea_api.services.assets import AssetService, get_asset_service
 from mellea_api.services.credentials import CredentialService, get_credential_service
 from mellea_api.services.environment import (
@@ -44,6 +46,7 @@ EnvironmentBuilderServiceDep = Annotated[
     EnvironmentBuilderService, Depends(get_environment_builder_service)
 ]
 LogServiceDep = Annotated[LogService, Depends(get_log_service)]
+RunAuditServiceDep = Annotated[RunAuditService, Depends(get_run_audit_service)]
 
 router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
 
@@ -146,6 +149,7 @@ async def create_run(
     env_service: EnvironmentServiceDep,
     credential_service: CredentialServiceDep,
     builder_service: EnvironmentBuilderServiceDep,
+    audit_service: RunAuditServiceDep,
 ) -> RunResponse:
     """Create a new run for a program.
 
@@ -277,6 +281,14 @@ async def create_run(
     # Record run created for quota tracking
     quota_service.record_run_created(current_user.id)
 
+    # Record audit event
+    audit_service.record_event(
+        run_id=run.id,
+        actor_id=current_user.id,
+        action=RunAuditAction.CREATE,
+        details={"program_id": request.program_id},
+    )
+
     return RunResponse(run=run)
 
 
@@ -329,6 +341,7 @@ async def get_run(
     run_id: str,
     current_user: CurrentUser,
     run_service: RunServiceDep,
+    audit_service: RunAuditServiceDep,
 ) -> RunResponse:
     """Get a run by ID.
 
@@ -342,6 +355,14 @@ async def get_run(
             detail=f"Run not found: {run_id}",
         )
 
+    # Record audit event (only for non-owner views to reduce noise)
+    if run.owner_id != current_user.id:
+        audit_service.record_event(
+            run_id=run_id,
+            actor_id=current_user.id,
+            action=RunAuditAction.VIEW,
+        )
+
     return RunResponse(run=run)
 
 
@@ -350,6 +371,7 @@ async def delete_run(
     run_id: str,
     current_user: CurrentUser,
     run_service: RunServiceDep,
+    audit_service: RunAuditServiceDep,
 ) -> None:
     """Delete a run by ID.
 
@@ -357,7 +379,15 @@ async def delete_run(
     This will permanently remove the run record and any associated logs.
     """
     try:
+        # Record audit event before deletion
+        audit_service.record_event(
+            run_id=run_id,
+            actor_id=current_user.id,
+            action=RunAuditAction.DELETE,
+        )
         run_service.delete_run(run_id)
+        # Clean up audit events for deleted run
+        audit_service.delete_events_for_run(run_id)
     except RunNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -400,6 +430,7 @@ async def update_run_visibility(
     request: UpdateVisibilityRequest,
     current_user: CurrentUser,
     run_service: RunServiceDep,
+    audit_service: RunAuditServiceDep,
 ) -> RunResponse:
     """Update a run's visibility mode.
 
@@ -424,7 +455,17 @@ async def update_run_visibility(
             detail="Only the run owner can change visibility",
         )
 
+    old_visibility = run.visibility.value
     updated_run = run_service.update_visibility(run_id, request.visibility)
+
+    # Record audit event
+    audit_service.record_event(
+        run_id=run_id,
+        actor_id=current_user.id,
+        action=RunAuditAction.VISIBILITY_CHANGE,
+        details={"from": old_visibility, "to": request.visibility.value},
+    )
+
     return RunResponse(run=updated_run)
 
 
@@ -434,6 +475,7 @@ async def share_run_with_user(
     request: ShareRunRequest,
     current_user: CurrentUser,
     run_service: RunServiceDep,
+    audit_service: RunAuditServiceDep,
 ) -> RunResponse:
     """Share a run with a specific user.
 
@@ -462,6 +504,15 @@ async def share_run_with_user(
         )
 
     updated_run = run_service.share_run_with_user(run_id, request.user_id, request.permission)
+
+    # Record audit event
+    audit_service.record_event(
+        run_id=run_id,
+        actor_id=current_user.id,
+        action=RunAuditAction.SHARE,
+        details={"target_user": request.user_id, "permission": request.permission.value},
+    )
+
     return RunResponse(run=updated_run)
 
 
@@ -471,6 +522,7 @@ async def revoke_run_access(
     user_id: str,
     current_user: CurrentUser,
     run_service: RunServiceDep,
+    audit_service: RunAuditServiceDep,
 ) -> RunResponse:
     """Revoke a user's access to a run.
 
@@ -492,6 +544,15 @@ async def revoke_run_access(
         )
 
     updated_run = run_service.revoke_run_access(run_id, user_id)
+
+    # Record audit event
+    audit_service.record_event(
+        run_id=run_id,
+        actor_id=current_user.id,
+        action=RunAuditAction.REVOKE,
+        details={"target_user": user_id},
+    )
+
     return RunResponse(run=updated_run)
 
 
@@ -533,6 +594,7 @@ async def cancel_run(
     run_id: str,
     current_user: CurrentUser,
     run_executor: RunExecutorDep,
+    audit_service: RunAuditServiceDep,
     force: bool = Query(
         default=False,
         description=(
@@ -554,6 +616,15 @@ async def cancel_run(
     """
     try:
         run = run_executor.cancel_run(run_id, force=force)
+
+        # Record audit event
+        audit_service.record_event(
+            run_id=run_id,
+            actor_id=current_user.id,
+            action=RunAuditAction.CANCEL,
+            details={"force": str(force)},
+        )
+
         return RunResponse(run=run)
     except RunNotFoundError as e:
         raise HTTPException(
@@ -653,6 +724,7 @@ async def stream_run_logs_sse(
     current_user: CurrentUserSSE,
     run_service: RunServiceDep,
     log_service: LogServiceDep,
+    audit_service: RunAuditServiceDep,
 ) -> EventSourceResponse:
     """Stream run logs in real-time via Server-Sent Events.
 
@@ -680,6 +752,13 @@ async def stream_run_logs_sse(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Run not found: {run_id}",
         )
+
+    # Record audit event for log streaming
+    audit_service.record_event(
+        run_id=run_id,
+        actor_id=current_user.id,
+        action=RunAuditAction.LOGS_STREAM,
+    )
 
     async def event_generator() -> AsyncGenerator[dict[str, str], None]:
         # Send existing output first if available
@@ -737,6 +816,7 @@ async def download_run_logs(
     run_id: str,
     current_user: CurrentUser,
     run_service: RunServiceDep,
+    audit_service: RunAuditServiceDep,
 ) -> PlainTextResponse:
     """Download run logs as a plain text file.
 
@@ -749,6 +829,13 @@ async def download_run_logs(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Run not found: {run_id}",
         )
+
+    # Record audit event for log download
+    audit_service.record_event(
+        run_id=run_id,
+        actor_id=current_user.id,
+        action=RunAuditAction.LOGS_VIEW,
+    )
 
     # Get the log content, defaulting to empty string if no output
     content = run.output or ""

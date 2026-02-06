@@ -13,6 +13,7 @@ from mellea_api.routes.github_import import router as github_import_router
 from mellea_api.routes.health import router as health_router
 from mellea_api.routes.llm_metrics import router as llm_metrics_router
 from mellea_api.routes.retention import router as retention_router
+from mellea_api.routes.run_audit import router as run_audit_router
 from mellea_api.routes.runs import router as runs_router
 from mellea_api.routes.sharing import router as sharing_router
 
@@ -30,6 +31,7 @@ __all__ = [
     "health_router",
     "llm_metrics_router",
     "retention_router",
+    "run_audit_router",
     "runs_router",
     "sharing_router",
 ]
