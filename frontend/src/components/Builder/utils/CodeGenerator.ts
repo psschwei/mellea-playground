@@ -550,8 +550,8 @@ export function generateCode(
     codeLines.push('import asyncio');
   }
   codeLines.push('');
-  codeLines.push('# Mellea runtime imports');
-  codeLines.push('from mellea.runtime import run_program, invoke_model');
+  codeLines.push('# Mellea runtime imports (using mellea 0.3.0 adapter)');
+  codeLines.push('from mellea_api.runtime import run_program, invoke_model');
   codeLines.push('');
 
   // Build input parameters for function signature
@@ -743,7 +743,8 @@ export function generateStandaloneScript(
 Standalone workflow script generated from Mellea Visual Builder
 
 This script includes runtime stubs that allow it to run independently.
-For production use, replace the stubs with actual Mellea runtime imports.
+For production use, replace the stubs with mellea 0.3.0 imports:
+  from mellea_api.runtime import run_program, invoke_model
 
 Generated at: ${new Date().toISOString()}
 """
@@ -756,46 +757,68 @@ import json
 # Runtime Stubs (replace with actual Mellea runtime for production)
 # =============================================================================
 
-async def run_program(program_id: str, **kwargs) -> Any:
+async def run_program(
+${indent}program_id: str,
+${indent}slot_name: str = "main",
+${indent}*,
+${indent}module_name: str | None = None,
+${indent}backend: str | None = None,
+${indent}model_id: str | None = None,
+${indent}**kwargs
+) -> Any:
 ${indent}"""
-${indent}Stub for running a Mellea program.
-${indent}
+${indent}Stub for running a Mellea program (mellea 0.3.0 API).
+
 ${indent}In production, this would:
-${indent}- Load the program from the asset store
-${indent}- Execute it with the provided inputs
-${indent}- Return the program output
-${indent}
+${indent}- Import the module (module_name or program_id)
+${indent}- Execute the @generative slot with given arguments
+${indent}- Return the slot output
+
 ${indent}Args:
-${indent}${indent}program_id: The ID of the program to run
-${indent}${indent}**kwargs: Input arguments for the program
-${indent}
+${indent}${indent}program_id: Program identifier (used as module name if module_name not provided)
+${indent}${indent}slot_name: Name of the @generative slot to execute (default: "main")
+${indent}${indent}module_name: Python module path (defaults to program_id)
+${indent}${indent}backend: Backend name ('ollama', 'openai', 'watsonx', etc.)
+${indent}${indent}model_id: Model identifier (e.g., 'granite4:micro', 'gpt-4o')
+${indent}${indent}**kwargs: Arguments to pass to the slot
+
 ${indent}Returns:
-${indent}${indent}The program output
+${indent}${indent}The slot output
 ${indent}"""
-${indent}print(f"[STUB] Running program: {program_id}")
+${indent}print(f"[STUB] Running program: {program_id}, slot: {slot_name}")
+${indent}print(f"[STUB] Backend: {backend or 'default'}, Model: {model_id or 'default'}")
 ${indent}print(f"[STUB] Inputs: {kwargs}")
-${indent}# Simulate program execution
+${indent}# Simulate slot execution
 ${indent}await asyncio.sleep(0.1)
-${indent}return {"status": "success", "program_id": program_id, "inputs": kwargs}
+${indent}return {"status": "success", "program_id": program_id, "slot": slot_name, "inputs": kwargs}
 
 
-async def invoke_model(model_id: str, prompt: Any) -> Any:
+async def invoke_model(
+${indent}model_id: str,
+${indent}prompt: str,
+${indent}*,
+${indent}backend: str | None = None,
+${indent}**kwargs
+) -> str:
 ${indent}"""
-${indent}Stub for invoking an LLM model.
-${indent}
+${indent}Stub for invoking an LLM model (mellea 0.3.0 API).
+
 ${indent}In production, this would:
-${indent}- Load the model configuration from the asset store
-${indent}- Send the prompt to the model API
+${indent}- Initialize a MelleaRuntime with the specified backend/model
+${indent}- Send the prompt via session.chat()
 ${indent}- Return the model response
-${indent}
+
 ${indent}Args:
-${indent}${indent}model_id: The ID of the model to invoke
-${indent}${indent}prompt: The input prompt or data
-${indent}
+${indent}${indent}model_id: Model identifier (e.g., 'ollama:granite4:micro', 'gpt-4o')
+${indent}${indent}prompt: The prompt to send
+${indent}${indent}backend: Optional backend override
+${indent}${indent}**kwargs: Additional model options
+
 ${indent}Returns:
-${indent}${indent}The model response
+${indent}${indent}Model response text
 ${indent}"""
 ${indent}print(f"[STUB] Invoking model: {model_id}")
+${indent}print(f"[STUB] Backend: {backend or 'auto'}")
 ${indent}print(f"[STUB] Prompt: {prompt}")
 ${indent}# Simulate model invocation
 ${indent}await asyncio.sleep(0.2)
