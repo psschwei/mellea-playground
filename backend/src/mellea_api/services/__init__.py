@@ -7,6 +7,11 @@ from mellea_api.services.assets import (
     WorkspaceError,
     get_asset_service,
 )
+from mellea_api.services.audit import (
+    AuditService,
+    get_audit_service,
+    reset_audit_service,
+)
 from mellea_api.services.auth import (
     AuthenticationError,
     AuthService,
@@ -85,6 +90,10 @@ __all__ = [
     "AssetNotFoundError",
     "AssetAlreadyExistsError",
     "WorkspaceError",
+    # Audit service
+    "AuditService",
+    "get_audit_service",
+    "reset_audit_service",
     # Auth service
     "AuthService",
     "get_auth_service",

@@ -3,6 +3,7 @@
 from mellea_api.routes.archive_upload import router as archive_upload_router
 from mellea_api.routes.artifacts import router as artifacts_router
 from mellea_api.routes.assets import router as assets_router
+from mellea_api.routes.audit import router as audit_router
 from mellea_api.routes.auth import router as auth_router
 from mellea_api.routes.builds import router as builds_router
 from mellea_api.routes.composition_runs import router as composition_runs_router
@@ -21,6 +22,7 @@ __all__ = [
     "archive_upload_router",
     "artifacts_router",
     "assets_router",
+    "audit_router",
     "auth_router",
     "builds_router",
     "composition_runs_router",

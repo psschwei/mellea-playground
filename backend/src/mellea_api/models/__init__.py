@@ -18,6 +18,12 @@ from mellea_api.models.assets import (
     SlotMetadata,
     SlotSignature,
 )
+from mellea_api.models.audit import (
+    AuditAction,
+    AuditEvent,
+    AuditEventListResponse,
+    AuditResourceType,
+)
 from mellea_api.models.build import (
     BuildContext,
     BuildResult,
@@ -60,6 +66,10 @@ __all__ = [
     "ArtifactType",
     "ArtifactUsage",
     "AssetMetadata",
+    "AuditAction",
+    "AuditEvent",
+    "AuditEventListResponse",
+    "AuditResourceType",
     "AuthConfig",
     "AuthProvider",
     "BuildContext",
