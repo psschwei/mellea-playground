@@ -88,6 +88,16 @@ class Settings(BaseSettings):
     # LLM Metrics Collector
     llm_metrics_retention_days: int = 90  # Delete metrics older than 90 days
 
+    # Email (SMTP)
+    smtp_enabled: bool = False
+    smtp_host: str = "localhost"
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = True
+    smtp_from_email: str = "noreply@mellea.local"
+    smtp_from_name: str = "Mellea Playground"
+
     def ensure_data_dirs(self) -> None:
         """Create data directory structure if it doesn't exist."""
         subdirs = ["metadata", "workspaces", "artifacts", "runs"]

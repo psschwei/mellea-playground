@@ -16,6 +16,7 @@ from mellea_api.models.notification import (
     NotificationType,
     NotificationTypePreference,
 )
+from mellea_api.services.email import EmailService, get_email_service
 
 logger = logging.getLogger(__name__)
 
@@ -158,16 +159,29 @@ class NotificationService:
         ```
     """
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        email_service: EmailService | None = None,
+    ) -> None:
         """Initialize the NotificationService.
 
         Args:
             settings: Application settings (uses default if not provided)
+            email_service: EmailService instance (uses global if not provided)
         """
         self.settings = settings or get_settings()
         self._store: JsonStore[Notification] | None = None
         self._preferences_store: JsonStore[NotificationPreferences] | None = None
+        self._email_service = email_service
         self.connection_manager = ConnectionManager()
+
+    @property
+    def email_service(self) -> EmailService:
+        """Get the email service, initializing if needed."""
+        if self._email_service is None:
+            self._email_service = get_email_service()
+        return self._email_service
 
     @property
     def store(self) -> JsonStore[Notification]:
@@ -205,6 +219,8 @@ class NotificationService:
         action_url: str | None = None,
         metadata: dict[str, str] | None = None,
         push: bool = True,
+        user_email: str | None = None,
+        user_name: str | None = None,
     ) -> Notification:
         """Create a notification and optionally push it to connected clients.
 
@@ -219,6 +235,8 @@ class NotificationService:
             action_url: URL for action
             metadata: Additional context
             push: Whether to push via WebSocket (default True)
+            user_email: User's email address (required for email notifications)
+            user_name: User's display name (for email personalization)
 
         Returns:
             The created notification
@@ -239,11 +257,77 @@ class NotificationService:
         created = self.store.create(notification)
         logger.debug(f"Created notification {created.id} for user {user_id}: {title}")
 
-        # Push to connected clients
-        if push:
+        # Check user preferences
+        prefs = self.get_preferences(user_id)
+
+        # Push to connected clients if enabled
+        if push and prefs.should_push(type):
             await self.push_notification(created)
 
+        # Send email if enabled and user email provided
+        if user_email and prefs.should_email(type):
+            await self._send_notification_email(
+                notification=created,
+                user_email=user_email,
+                user_name=user_name or "User",
+            )
+
         return created
+
+    async def _send_notification_email(
+        self,
+        notification: Notification,
+        user_email: str,
+        user_name: str,
+    ) -> bool:
+        """Send an email for a notification.
+
+        Args:
+            notification: The notification to send
+            user_email: Recipient email
+            user_name: Recipient name
+
+        Returns:
+            True if email was sent successfully
+        """
+        # For run-related notifications, send specialized email
+        if notification.type in {
+            NotificationType.RUN_COMPLETED,
+            NotificationType.RUN_FAILED,
+        }:
+            status = "succeeded" if notification.type == NotificationType.RUN_COMPLETED else "failed"
+            program_name = notification.metadata.get("program_name", "Unknown Program") if notification.metadata else "Unknown Program"
+            duration = notification.metadata.get("duration_seconds") if notification.metadata else None
+            error = notification.metadata.get("error_message") if notification.metadata else None
+
+            return await self.email_service.send_run_completed_email(
+                to_email=user_email,
+                to_name=user_name,
+                run_id=notification.resource_id or "unknown",
+                program_name=program_name,
+                status=status,
+                duration_seconds=float(duration) if duration else None,
+                error_message=error,
+                action_url=notification.action_url,
+            )
+
+        # Generic email for other notification types
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<body style="font-family: sans-serif; padding: 20px;">
+    <h2>{notification.title}</h2>
+    <p>{notification.message}</p>
+    {"<a href='" + notification.action_url + "'>View Details</a>" if notification.action_url else ""}
+</body>
+</html>
+"""
+        return await self.email_service.send_email(
+            to_email=user_email,
+            subject=notification.title,
+            html_content=html_content,
+            text_content=notification.message,
+        )
 
     async def push_notification(self, notification: Notification) -> int:
         """Push a notification to connected WebSocket clients.

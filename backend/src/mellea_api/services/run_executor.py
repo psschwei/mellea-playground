@@ -11,13 +11,19 @@ from mellea_api.models.assets import ProgramAsset
 from mellea_api.models.build import BuildJobStatus
 from mellea_api.models.common import ImageBuildStatus, RunExecutionStatus
 from mellea_api.models.k8s import JobInfo, JobStatus
+from mellea_api.models.notification import NotificationPriority, NotificationType
 from mellea_api.models.run import Run
 from mellea_api.services.assets import AssetService, get_asset_service
+from mellea_api.services.auth import AuthService, get_auth_service
 from mellea_api.services.credentials import CredentialService, get_credential_service
 from mellea_api.services.environment import EnvironmentService, get_environment_service
 from mellea_api.services.k8s_jobs import K8sJobService, get_k8s_job_service
 from mellea_api.services.kaniko_builder import KanikoBuildService, get_kaniko_build_service
 from mellea_api.services.log import LogService, get_log_service
+from mellea_api.services.notification import (
+    NotificationService,
+    get_notification_service,
+)
 from mellea_api.services.quota import QuotaService, get_quota_service
 from mellea_api.services.run import RunNotFoundError, RunService, get_run_service
 
@@ -94,6 +100,9 @@ class RunExecutor:
         credential_service: CredentialService | None = None,
         log_service: LogService | None = None,
         quota_service: QuotaService | None = None,
+        notification_service: NotificationService | None = None,
+        auth_service: AuthService | None = None,
+        asset_service: AssetService | None = None,
     ) -> None:
         """Initialize the RunExecutor.
 
@@ -104,6 +113,9 @@ class RunExecutor:
             credential_service: CredentialService instance (uses global if not provided)
             log_service: LogService instance (uses global if not provided)
             quota_service: QuotaService instance (uses global if not provided)
+            notification_service: NotificationService instance (uses global if not provided)
+            auth_service: AuthService instance (uses global if not provided)
+            asset_service: AssetService instance (uses global if not provided)
         """
         self._run_service = run_service
         self._k8s_service = k8s_service
@@ -111,6 +123,9 @@ class RunExecutor:
         self._credential_service = credential_service
         self._log_service = log_service
         self._quota_service = quota_service
+        self._notification_service = notification_service
+        self._auth_service = auth_service
+        self._asset_service = asset_service
 
     @property
     def run_service(self) -> RunService:
@@ -153,6 +168,27 @@ class RunExecutor:
         if self._quota_service is None:
             self._quota_service = get_quota_service()
         return self._quota_service
+
+    @property
+    def notification_service(self) -> NotificationService:
+        """Get the NotificationService, using global instance if not set."""
+        if self._notification_service is None:
+            self._notification_service = get_notification_service()
+        return self._notification_service
+
+    @property
+    def auth_service(self) -> AuthService:
+        """Get the AuthService, using global instance if not set."""
+        if self._auth_service is None:
+            self._auth_service = get_auth_service()
+        return self._auth_service
+
+    @property
+    def asset_service(self) -> AssetService:
+        """Get the AssetService, using global instance if not set."""
+        if self._asset_service is None:
+            self._asset_service = get_asset_service()
+        return self._asset_service
 
     def submit_run(
         self,
@@ -362,6 +398,15 @@ class RunExecutor:
                 updated_run.owner_id,
             )
 
+            # Send completion notification (fire and forget)
+            try:
+                asyncio.create_task(
+                    self._send_run_completion_notification(updated_run, target_status)
+                )
+            except RuntimeError:
+                # No event loop running - skip notification
+                logger.debug("No event loop available for notification, skipping")
+
         # Clean up K8s job after run completes (terminal state)
         if updated_run.is_terminal() and run.job_name:
             try:
@@ -371,6 +416,71 @@ class RunExecutor:
                 logger.warning("Failed to clean up job %s: %s", run.job_name, e)
 
         return updated_run
+
+    async def _send_run_completion_notification(
+        self,
+        run: Run,
+        status: RunExecutionStatus,
+    ) -> None:
+        """Send a notification when a run completes.
+
+        Args:
+            run: The completed run
+            status: Final run status
+        """
+        try:
+            # Get user info for email
+            user = self.auth_service.get_user_by_id(run.owner_id)
+            if user is None:
+                logger.warning("User not found for run notification: %s", run.owner_id)
+                return
+
+            # Get program name for the notification
+            program = self.asset_service.get_program(run.program_id)
+            program_name = program.name if program else "Unknown Program"
+
+            # Calculate duration
+            duration_seconds = None
+            if run.started_at and run.completed_at:
+                duration_seconds = (run.completed_at - run.started_at).total_seconds()
+
+            # Determine notification type and message
+            if status == RunExecutionStatus.SUCCEEDED:
+                notif_type = NotificationType.RUN_COMPLETED
+                title = f"Run completed: {program_name}"
+                message = f"Your run for {program_name} completed successfully."
+                priority = NotificationPriority.NORMAL
+            else:
+                notif_type = NotificationType.RUN_FAILED
+                title = f"Run failed: {program_name}"
+                message = f"Your run for {program_name} failed."
+                if run.error_message:
+                    message += f" Error: {run.error_message[:100]}"
+                priority = NotificationPriority.HIGH
+
+            # Create notification with email support
+            await self.notification_service.create_notification(
+                user_id=run.owner_id,
+                type=notif_type,
+                title=title,
+                message=message,
+                priority=priority,
+                resource_type="run",
+                resource_id=run.id,
+                action_url=f"/runs/{run.id}",
+                metadata={
+                    "program_name": program_name,
+                    "duration_seconds": str(duration_seconds) if duration_seconds else "",
+                    "error_message": run.error_message or "",
+                },
+                user_email=user.email,
+                user_name=user.display_name,
+            )
+
+            logger.info("Sent run completion notification for run %s", run.id)
+
+        except Exception as e:
+            logger.error("Failed to send run completion notification: %s", e)
 
     def cancel_run(self, run_id: str, force: bool = False) -> Run:
         """Cancel a run and its K8s job with graceful shutdown.
