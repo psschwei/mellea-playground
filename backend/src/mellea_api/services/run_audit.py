@@ -79,12 +79,12 @@ class RunAuditService:
             The created audit event
         """
         event = RunAuditEvent(
-            runId=run_id,
-            actorId=actor_id,
+            run_id=run_id,
+            actor_id=actor_id,
             action=action,
             details=details,
-            ipAddress=ip_address,
-            userAgent=user_agent,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
         created = self.audit_store.create(event)
         logger.debug(
@@ -193,11 +193,11 @@ class RunAuditService:
         last_accessed = events[0].timestamp if events else None
 
         return RunAuditSummary(
-            runId=run_id,
-            totalEvents=len(events),
-            uniqueViewers=len(unique_actors),
-            lastAccessed=last_accessed,
-            accessByAction=action_counts,
+            run_id=run_id,
+            total_events=len(events),
+            unique_viewers=len(unique_actors),
+            last_accessed=last_accessed,
+            access_by_action=action_counts,
         )
 
     def delete_events_for_run(self, run_id: str) -> int:

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from mellea_api.core.deps import CurrentUser
 from mellea_api.models.run_audit import RunAuditAction, RunAuditEvent, RunAuditSummary

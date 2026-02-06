@@ -1,13 +1,12 @@
 """Tests for run access audit trail."""
 
-from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
 
 from mellea_api.core.config import Settings
-from mellea_api.models.run_audit import RunAuditAction, RunAuditEvent, RunAuditSummary
+from mellea_api.models.run_audit import RunAuditAction, RunAuditEvent
 from mellea_api.services.run_audit import RunAuditService
 
 

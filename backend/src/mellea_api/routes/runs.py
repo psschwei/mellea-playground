@@ -14,7 +14,6 @@ from mellea_api.core.deps import CurrentUser, CurrentUserSSE
 from mellea_api.models.common import ImageBuildStatus, Permission, RunExecutionStatus, SharingMode
 from mellea_api.models.run import Run
 from mellea_api.models.run_audit import RunAuditAction
-from mellea_api.services.run_audit import RunAuditService, get_run_audit_service
 from mellea_api.services.assets import AssetService, get_asset_service
 from mellea_api.services.credentials import CredentialService, get_credential_service
 from mellea_api.services.environment import (
@@ -34,6 +33,7 @@ from mellea_api.services.run import (
     RunService,
     get_run_service,
 )
+from mellea_api.services.run_audit import RunAuditService, get_run_audit_service
 from mellea_api.services.run_executor import RunExecutor, get_run_executor
 
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
