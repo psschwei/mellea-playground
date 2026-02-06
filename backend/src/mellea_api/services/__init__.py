@@ -12,6 +12,12 @@ from mellea_api.services.audit import (
     get_audit_service,
     reset_audit_service,
 )
+from mellea_api.services.notification import (
+    ConnectionManager,
+    NotificationService,
+    get_notification_service,
+    reset_notification_service,
+)
 from mellea_api.services.auth import (
     AuthenticationError,
     AuthService,
@@ -94,6 +100,11 @@ __all__ = [
     "AuditService",
     "get_audit_service",
     "reset_audit_service",
+    # Notification service
+    "ConnectionManager",
+    "NotificationService",
+    "get_notification_service",
+    "reset_notification_service",
     # Auth service
     "AuthService",
     "get_auth_service",

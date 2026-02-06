@@ -13,6 +13,9 @@ from mellea_api.routes.environments import router as environments_router
 from mellea_api.routes.github_import import router as github_import_router
 from mellea_api.routes.health import router as health_router
 from mellea_api.routes.llm_metrics import router as llm_metrics_router
+from mellea_api.routes.notifications import admin_router as notifications_admin_router
+from mellea_api.routes.notifications import router as notifications_router
+from mellea_api.routes.notifications import ws_router as notifications_ws_router
 from mellea_api.routes.retention import router as retention_router
 from mellea_api.routes.run_audit import router as run_audit_router
 from mellea_api.routes.runs import router as runs_router
@@ -32,6 +35,9 @@ __all__ = [
     "github_import_router",
     "health_router",
     "llm_metrics_router",
+    "notifications_admin_router",
+    "notifications_router",
+    "notifications_ws_router",
     "retention_router",
     "run_audit_router",
     "runs_router",

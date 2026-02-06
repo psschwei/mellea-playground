@@ -24,6 +24,15 @@ from mellea_api.models.audit import (
     AuditEventListResponse,
     AuditResourceType,
 )
+from mellea_api.models.notification import (
+    Notification,
+    NotificationCreateRequest,
+    NotificationListResponse,
+    NotificationPriority,
+    NotificationType,
+    NotificationUpdateRequest,
+    WebSocketMessage,
+)
 from mellea_api.models.build import (
     BuildContext,
     BuildResult,
@@ -70,6 +79,13 @@ __all__ = [
     "AuditEvent",
     "AuditEventListResponse",
     "AuditResourceType",
+    "Notification",
+    "NotificationCreateRequest",
+    "NotificationListResponse",
+    "NotificationPriority",
+    "NotificationType",
+    "NotificationUpdateRequest",
+    "WebSocketMessage",
     "AuthConfig",
     "AuthProvider",
     "BuildContext",
