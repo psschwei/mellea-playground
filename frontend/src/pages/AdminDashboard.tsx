@@ -49,10 +49,16 @@ import {
   RadioGroup,
   Radio,
   Stack,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  Progress,
 } from '@chakra-ui/react';
-import { FiSearch, FiMoreVertical, FiUsers, FiUserCheck, FiUserX, FiClock, FiShield } from 'react-icons/fi';
+import { FiSearch, FiMoreVertical, FiUsers, FiUserCheck, FiUserX, FiClock, FiShield, FiActivity, FiAlertTriangle } from 'react-icons/fi';
 import { useAuth } from '@/hooks';
-import { adminApi, AdminUser, AdminUserStats, AdminUserListParams } from '@/api/admin';
+import { adminApi, AdminUser, AdminUserStats, AdminUserListParams, QuotaUsageStats } from '@/api/admin';
 import type { UserRole, UserStatus } from '@/types';
 
 const roleColorMap: Record<UserRole, string> = {
@@ -94,6 +100,10 @@ export function AdminDashboardPage() {
   const [newRole, setNewRole] = useState<UserRole>('end_user');
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
+  // Quota monitoring state
+  const [quotaStats, setQuotaStats] = useState<QuotaUsageStats | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(false);
+
   // Check if current user is admin
   const isAdmin = user?.role === 'admin';
 
@@ -133,12 +143,25 @@ export function AdminDashboardPage() {
     }
   }, [page, searchQuery, roleFilter, statusFilter]);
 
+  const fetchQuotaStats = useCallback(async () => {
+    setQuotaLoading(true);
+    try {
+      const quotaData = await adminApi.getQuotaUsageStats();
+      setQuotaStats(quotaData);
+    } catch (err) {
+      console.error('Failed to fetch quota stats:', err);
+    } finally {
+      setQuotaLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isAdmin) {
       fetchStats();
       fetchUsers();
+      fetchQuotaStats();
     }
-  }, [isAdmin, fetchStats, fetchUsers]);
+  }, [isAdmin, fetchStats, fetchUsers, fetchQuotaStats]);
 
   const handleSuspendUser = async (userId: string) => {
     try {
@@ -238,11 +261,20 @@ export function AdminDashboardPage() {
   return (
     <Box>
       <Heading size="lg" mb={6}>
-        User Management
+        Admin Dashboard
       </Heading>
 
-      {/* Statistics Cards */}
-      <Grid templateColumns="repeat(4, 1fr)" gap={6} mb={8}>
+      <Tabs colorScheme="blue" mb={6}>
+        <TabList>
+          <Tab>User Management</Tab>
+          <Tab>Quota Monitoring</Tab>
+        </TabList>
+
+        <TabPanels>
+          {/* User Management Tab */}
+          <TabPanel px={0}>
+            {/* Statistics Cards */}
+            <Grid templateColumns="repeat(4, 1fr)" gap={6} mb={8}>
         <GridItem>
           <Card>
             <CardBody>
@@ -494,6 +526,208 @@ export function AdminDashboardPage() {
           )}
         </CardBody>
       </Card>
+
+          </TabPanel>
+
+          {/* Quota Monitoring Tab */}
+          <TabPanel px={0}>
+            {/* Quota Summary Cards */}
+            <Grid templateColumns="repeat(4, 1fr)" gap={6} mb={8}>
+              <GridItem>
+                <Card>
+                  <CardBody>
+                    <Stat>
+                      <HStack>
+                        <Box color="blue.500">
+                          <FiUsers size={24} />
+                        </Box>
+                        <Box>
+                          <StatLabel>Active Users</StatLabel>
+                          <StatNumber>{quotaStats?.totalUsers ?? '-'}</StatNumber>
+                          <StatHelpText>With quota tracking</StatHelpText>
+                        </Box>
+                      </HStack>
+                    </Stat>
+                  </CardBody>
+                </Card>
+              </GridItem>
+
+              <GridItem>
+                <Card>
+                  <CardBody>
+                    <Stat>
+                      <HStack>
+                        <Box color="orange.500">
+                          <FiAlertTriangle size={24} />
+                        </Box>
+                        <Box>
+                          <StatLabel>Users at Limit</StatLabel>
+                          <StatNumber>{quotaStats?.usersAtLimit ?? '-'}</StatNumber>
+                          <StatHelpText>Quota exceeded</StatHelpText>
+                        </Box>
+                      </HStack>
+                    </Stat>
+                  </CardBody>
+                </Card>
+              </GridItem>
+
+              <GridItem>
+                <Card>
+                  <CardBody>
+                    <Stat>
+                      <HStack>
+                        <Box color="purple.500">
+                          <FiActivity size={24} />
+                        </Box>
+                        <Box>
+                          <StatLabel>CPU Hours (Month)</StatLabel>
+                          <StatNumber>{quotaStats?.totalCpuHoursUsed?.toFixed(1) ?? '-'}</StatNumber>
+                          <StatHelpText>Total consumed</StatHelpText>
+                        </Box>
+                      </HStack>
+                    </Stat>
+                  </CardBody>
+                </Card>
+              </GridItem>
+
+              <GridItem>
+                <Card>
+                  <CardBody>
+                    <Stat>
+                      <HStack>
+                        <Box color="green.500">
+                          <FiClock size={24} />
+                        </Box>
+                        <Box>
+                          <StatLabel>Runs Today</StatLabel>
+                          <StatNumber>{quotaStats?.totalRunsToday ?? '-'}</StatNumber>
+                          <StatHelpText>All users combined</StatHelpText>
+                        </Box>
+                      </HStack>
+                    </Stat>
+                  </CardBody>
+                </Card>
+              </GridItem>
+            </Grid>
+
+            {quotaLoading ? (
+              <Flex justify="center" py={8}>
+                <Spinner size="lg" />
+              </Flex>
+            ) : (
+              <Grid templateColumns="repeat(2, 1fr)" gap={6}>
+                {/* Top Users by CPU Hours */}
+                <GridItem>
+                  <Card>
+                    <CardHeader>
+                      <Heading size="md">Top Users by CPU Hours (Month)</Heading>
+                    </CardHeader>
+                    <CardBody>
+                      {quotaStats?.topUsersByCpu && quotaStats.topUsersByCpu.length > 0 ? (
+                        <Table variant="simple" size="sm">
+                          <Thead>
+                            <Tr>
+                              <Th>User</Th>
+                              <Th isNumeric>Used</Th>
+                              <Th isNumeric>Limit</Th>
+                              <Th width="150px">Usage</Th>
+                            </Tr>
+                          </Thead>
+                          <Tbody>
+                            {quotaStats.topUsersByCpu.slice(0, 5).map((u) => (
+                              <Tr key={u.userId}>
+                                <Td>
+                                  <VStack align="start" spacing={0}>
+                                    <Text fontWeight="medium" fontSize="sm">{u.displayName}</Text>
+                                    <Text fontSize="xs" color="gray.500">{u.email}</Text>
+                                  </VStack>
+                                </Td>
+                                <Td isNumeric>{u.cpuHoursUsed?.toFixed(1)}</Td>
+                                <Td isNumeric>{u.cpuHoursLimit}</Td>
+                                <Td>
+                                  <VStack align="stretch" spacing={1}>
+                                    <Progress
+                                      value={u.percentUsed}
+                                      size="sm"
+                                      colorScheme={u.percentUsed >= 90 ? 'red' : u.percentUsed >= 70 ? 'yellow' : 'green'}
+                                      borderRadius="md"
+                                    />
+                                    <Text fontSize="xs" color="gray.500" textAlign="right">
+                                      {u.percentUsed.toFixed(0)}%
+                                    </Text>
+                                  </VStack>
+                                </Td>
+                              </Tr>
+                            ))}
+                          </Tbody>
+                        </Table>
+                      ) : (
+                        <Text color="gray.500" textAlign="center" py={4}>
+                          No usage data available
+                        </Text>
+                      )}
+                    </CardBody>
+                  </Card>
+                </GridItem>
+
+                {/* Top Users by Daily Runs */}
+                <GridItem>
+                  <Card>
+                    <CardHeader>
+                      <Heading size="md">Top Users by Runs Today</Heading>
+                    </CardHeader>
+                    <CardBody>
+                      {quotaStats?.topUsersByRuns && quotaStats.topUsersByRuns.length > 0 ? (
+                        <Table variant="simple" size="sm">
+                          <Thead>
+                            <Tr>
+                              <Th>User</Th>
+                              <Th isNumeric>Runs</Th>
+                              <Th isNumeric>Limit</Th>
+                              <Th width="150px">Usage</Th>
+                            </Tr>
+                          </Thead>
+                          <Tbody>
+                            {quotaStats.topUsersByRuns.slice(0, 5).map((u) => (
+                              <Tr key={u.userId}>
+                                <Td>
+                                  <VStack align="start" spacing={0}>
+                                    <Text fontWeight="medium" fontSize="sm">{u.displayName}</Text>
+                                    <Text fontSize="xs" color="gray.500">{u.email}</Text>
+                                  </VStack>
+                                </Td>
+                                <Td isNumeric>{u.runsToday}</Td>
+                                <Td isNumeric>{u.runsLimit}</Td>
+                                <Td>
+                                  <VStack align="stretch" spacing={1}>
+                                    <Progress
+                                      value={u.percentUsed}
+                                      size="sm"
+                                      colorScheme={u.percentUsed >= 90 ? 'red' : u.percentUsed >= 70 ? 'yellow' : 'green'}
+                                      borderRadius="md"
+                                    />
+                                    <Text fontSize="xs" color="gray.500" textAlign="right">
+                                      {u.percentUsed.toFixed(0)}%
+                                    </Text>
+                                  </VStack>
+                                </Td>
+                              </Tr>
+                            ))}
+                          </Tbody>
+                        </Table>
+                      ) : (
+                        <Text color="gray.500" textAlign="center" py={4}>
+                          No runs today
+                        </Text>
+                      )}
+                    </CardBody>
+                  </Card>
+                </GridItem>
+              </Grid>
+            )}
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
 
       {/* Role Assignment Modal */}
       <Modal isOpen={isRoleModalOpen} onClose={onRoleModalClose}>

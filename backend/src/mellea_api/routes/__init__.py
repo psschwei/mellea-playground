@@ -1,5 +1,6 @@
 """API route modules."""
 
+from mellea_api.routes.admin import router as admin_router
 from mellea_api.routes.archive_upload import router as archive_upload_router
 from mellea_api.routes.artifacts import router as artifacts_router
 from mellea_api.routes.assets import router as assets_router
@@ -23,6 +24,7 @@ from mellea_api.routes.runs import router as runs_router
 from mellea_api.routes.sharing import router as sharing_router
 
 __all__ = [
+    "admin_router",
     "archive_upload_router",
     "artifacts_router",
     "assets_router",

@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from mellea_api.core.config import get_settings
 from mellea_api.core.telemetry import setup_telemetry
 from mellea_api.routes import (
+    admin_router,
     archive_upload_router,
     artifacts_router,
     assets_router,
@@ -114,6 +115,7 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(admin_router)
     app.include_router(artifacts_router)
     app.include_router(assets_router)
     app.include_router(audit_router)

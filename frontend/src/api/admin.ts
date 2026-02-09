@@ -13,6 +13,26 @@ export interface AdminUserStats {
   };
 }
 
+export interface QuotaUserUsage {
+  userId: string;
+  displayName: string;
+  email: string;
+  cpuHoursUsed?: number;
+  cpuHoursLimit?: number;
+  runsToday?: number;
+  runsLimit?: number;
+  percentUsed: number;
+}
+
+export interface QuotaUsageStats {
+  totalUsers: number;
+  usersAtLimit: number;
+  totalCpuHoursUsed: number;
+  totalRunsToday: number;
+  topUsersByCpu: QuotaUserUsage[];
+  topUsersByRuns: QuotaUserUsage[];
+}
+
 export interface AdminUserListParams {
   page?: number;
   limit?: number;
@@ -89,5 +109,17 @@ export const adminApi = {
   // Delete a user (soft delete)
   deleteUser: async (userId: string): Promise<void> => {
     await apiClient.delete(`/admin/users/${userId}`);
+  },
+
+  // Get system-wide quota usage statistics
+  getQuotaUsageStats: async (): Promise<QuotaUsageStats> => {
+    const response = await apiClient.get<QuotaUsageStats>('/admin/quotas/usage');
+    return response.data;
+  },
+
+  // Get quota details for a specific user
+  getUserQuotaDetails: async (userId: string): Promise<{ user: { id: string; displayName: string; email: string; role: string }; quotas: Record<string, unknown> }> => {
+    const response = await apiClient.get(`/admin/quotas/user/${userId}`);
+    return response.data;
   },
 };
