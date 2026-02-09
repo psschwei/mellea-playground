@@ -32,13 +32,25 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
+  MenuDivider,
   useToast,
   Spinner,
   Alert,
   AlertIcon,
   Flex,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  ModalCloseButton,
+  useDisclosure,
+  RadioGroup,
+  Radio,
+  Stack,
 } from '@chakra-ui/react';
-import { FiSearch, FiMoreVertical, FiUsers, FiUserCheck, FiUserX, FiClock } from 'react-icons/fi';
+import { FiSearch, FiMoreVertical, FiUsers, FiUserCheck, FiUserX, FiClock, FiShield } from 'react-icons/fi';
 import { useAuth } from '@/hooks';
 import { adminApi, AdminUser, AdminUserStats, AdminUserListParams } from '@/api/admin';
 import type { UserRole, UserStatus } from '@/types';
@@ -64,6 +76,7 @@ const roleLabelMap: Record<UserRole, string> = {
 export function AdminDashboardPage() {
   const { user } = useAuth();
   const toast = useToast();
+  const { isOpen: isRoleModalOpen, onOpen: onRoleModalOpen, onClose: onRoleModalClose } = useDisclosure();
 
   const [stats, setStats] = useState<AdminUserStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -75,6 +88,11 @@ export function AdminDashboardPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+
+  // Role assignment state
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [newRole, setNewRole] = useState<UserRole>('end_user');
+  const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
   // Check if current user is admin
   const isAdmin = user?.role === 'admin';
@@ -157,6 +175,42 @@ export function AdminDashboardPage() {
         status: 'error',
         duration: 3000,
       });
+    }
+  };
+
+  const handleOpenRoleModal = (targetUser: AdminUser) => {
+    setSelectedUser(targetUser);
+    setNewRole(targetUser.role);
+    onRoleModalOpen();
+  };
+
+  const handleRoleChange = async () => {
+    if (!selectedUser || newRole === selectedUser.role) {
+      onRoleModalClose();
+      return;
+    }
+
+    setIsUpdatingRole(true);
+    try {
+      await adminApi.updateUser(selectedUser.id, { role: newRole });
+      toast({
+        title: 'Role updated',
+        description: `${selectedUser.displayName}'s role has been changed to ${roleLabelMap[newRole]}.`,
+        status: 'success',
+        duration: 3000,
+      });
+      fetchUsers();
+      fetchStats();
+      onRoleModalClose();
+    } catch {
+      toast({
+        title: 'Failed to update role',
+        description: 'Please try again.',
+        status: 'error',
+        duration: 3000,
+      });
+    } finally {
+      setIsUpdatingRole(false);
     }
   };
 
@@ -390,6 +444,13 @@ export function AdminDashboardPage() {
                             isDisabled={u.id === user?.id}
                           />
                           <MenuList>
+                            <MenuItem
+                              icon={<FiShield />}
+                              onClick={() => handleOpenRoleModal(u)}
+                            >
+                              Change Role
+                            </MenuItem>
+                            <MenuDivider />
                             {u.status === 'active' ? (
                               <MenuItem onClick={() => handleSuspendUser(u.id)}>
                                 Suspend User
@@ -433,6 +494,89 @@ export function AdminDashboardPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Role Assignment Modal */}
+      <Modal isOpen={isRoleModalOpen} onClose={onRoleModalClose}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Change User Role</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {selectedUser && (
+              <VStack align="stretch" spacing={4}>
+                <HStack>
+                  <Avatar size="md" name={selectedUser.displayName} src={selectedUser.avatarUrl} />
+                  <VStack align="start" spacing={0}>
+                    <Text fontWeight="medium">{selectedUser.displayName}</Text>
+                    <Text fontSize="sm" color="gray.500">{selectedUser.email}</Text>
+                  </VStack>
+                </HStack>
+
+                <Box>
+                  <Text fontWeight="medium" mb={2}>Current Role</Text>
+                  <Badge colorScheme={roleColorMap[selectedUser.role]} size="lg">
+                    {roleLabelMap[selectedUser.role]}
+                  </Badge>
+                </Box>
+
+                <Box>
+                  <Text fontWeight="medium" mb={3}>New Role</Text>
+                  <RadioGroup value={newRole} onChange={(value) => setNewRole(value as UserRole)}>
+                    <Stack spacing={3}>
+                      <Radio value="end_user">
+                        <VStack align="start" spacing={0}>
+                          <Text fontWeight="medium">End User</Text>
+                          <Text fontSize="sm" color="gray.500">
+                            Basic access to run programs and view results
+                          </Text>
+                        </VStack>
+                      </Radio>
+                      <Radio value="developer">
+                        <VStack align="start" spacing={0}>
+                          <Text fontWeight="medium">Developer</Text>
+                          <Text fontSize="sm" color="gray.500">
+                            Create and manage programs, models, and compositions
+                          </Text>
+                        </VStack>
+                      </Radio>
+                      <Radio value="admin">
+                        <VStack align="start" spacing={0}>
+                          <Text fontWeight="medium">Admin</Text>
+                          <Text fontSize="sm" color="gray.500">
+                            Full access including user management and system settings
+                          </Text>
+                        </VStack>
+                      </Radio>
+                    </Stack>
+                  </RadioGroup>
+                </Box>
+
+                {newRole !== selectedUser.role && (
+                  <Alert status="warning" borderRadius="md">
+                    <AlertIcon />
+                    <Text fontSize="sm">
+                      Changing role to <strong>{roleLabelMap[newRole]}</strong> will modify this user's permissions immediately.
+                    </Text>
+                  </Alert>
+                )}
+              </VStack>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={onRoleModalClose}>
+              Cancel
+            </Button>
+            <Button
+              colorScheme="blue"
+              onClick={handleRoleChange}
+              isLoading={isUpdatingRole}
+              isDisabled={!selectedUser || newRole === selectedUser?.role}
+            >
+              Update Role
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 }
