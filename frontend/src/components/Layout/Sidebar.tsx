@@ -10,8 +10,10 @@ import {
   FiPlay,
   FiSettings,
   FiShare2,
+  FiUsers,
 } from 'react-icons/fi';
 import type { IconType } from 'react-icons';
+import { useAuth } from '@/hooks';
 
 interface NavItemProps {
   to: string;
@@ -51,8 +53,11 @@ function NavItem({ to, icon, label }: NavItemProps) {
 }
 
 export function Sidebar() {
+  const { user } = useAuth();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
+
+  const isAdmin = user?.role === 'admin';
 
   return (
     <Box
@@ -76,6 +81,22 @@ export function Sidebar() {
         <NavItem to="/compositions" icon={FiGitBranch} label="Compositions" />
         <NavItem to="/runs" icon={FiPlay} label="Runs" />
         <NavItem to="/shared-with-me" icon={FiShare2} label="Shared with Me" />
+
+        {isAdmin && (
+          <Box pt={8}>
+            <Text
+              px={4}
+              pb={2}
+              fontSize="xs"
+              fontWeight="semibold"
+              color="gray.500"
+              textTransform="uppercase"
+            >
+              Administration
+            </Text>
+            <NavItem to="/admin" icon={FiUsers} label="User Management" />
+          </Box>
+        )}
 
         <Box pt={8}>
           <Text

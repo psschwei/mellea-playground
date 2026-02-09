@@ -12,3 +12,4 @@ export { ModelsPage } from './Models';
 export { BuilderPage } from './Builder';
 export { CompositionsPage } from './Compositions';
 export { SharedWithMePage } from './SharedWithMe';
+export { AdminDashboardPage } from './AdminDashboard';

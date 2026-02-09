@@ -1,5 +1,6 @@
 export { default as apiClient } from './client';
 export { setToken, getToken, clearToken, isAuthenticated } from './client';
+export { adminApi } from './admin';
 export { archiveUploadApi } from './archive-upload';
 export { assetsApi } from './assets';
 export { authApi } from './auth';
