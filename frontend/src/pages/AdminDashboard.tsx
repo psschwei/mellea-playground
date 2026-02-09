@@ -56,7 +56,7 @@ import {
   TabPanel,
   Progress,
 } from '@chakra-ui/react';
-import { FiSearch, FiMoreVertical, FiUsers, FiUserCheck, FiUserX, FiClock, FiShield, FiActivity, FiAlertTriangle } from 'react-icons/fi';
+import { FiSearch, FiMoreVertical, FiUsers, FiUserCheck, FiUserX, FiClock, FiShield, FiActivity, FiAlertTriangle, FiEye } from 'react-icons/fi';
 import { useAuth } from '@/hooks';
 import { adminApi, AdminUser, AdminUserStats, AdminUserListParams, QuotaUsageStats } from '@/api/admin';
 import type { UserRole, UserStatus } from '@/types';
@@ -205,6 +205,28 @@ export function AdminDashboardPage() {
     setSelectedUser(targetUser);
     setNewRole(targetUser.role);
     onRoleModalOpen();
+  };
+
+  const { startImpersonation } = useAuth();
+
+  const handleImpersonate = async (targetUser: AdminUser) => {
+    try {
+      await startImpersonation(targetUser.id);
+      toast({
+        title: 'Impersonation started',
+        description: `You are now viewing the system as ${targetUser.displayName}.`,
+        status: 'info',
+        duration: 3000,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to impersonate user';
+      toast({
+        title: 'Failed to impersonate',
+        description: message,
+        status: 'error',
+        duration: 3000,
+      });
+    }
   };
 
   const handleRoleChange = async () => {
@@ -476,6 +498,17 @@ export function AdminDashboardPage() {
                             isDisabled={u.id === user?.id}
                           />
                           <MenuList>
+                            {u.role !== 'admin' && u.status === 'active' && (
+                              <>
+                                <MenuItem
+                                  icon={<FiEye />}
+                                  onClick={() => handleImpersonate(u)}
+                                >
+                                  Impersonate User
+                                </MenuItem>
+                                <MenuDivider />
+                              </>
+                            )}
                             <MenuItem
                               icon={<FiShield />}
                               onClick={() => handleOpenRoleModal(u)}

@@ -1,4 +1,4 @@
-"""Admin routes for user management and quota monitoring."""
+"""Admin routes for user management, quota monitoring, and impersonation."""
 
 from datetime import datetime
 from typing import Annotated, Any
@@ -6,7 +6,9 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from mellea_api.core.deps import ActualAdminUser, ImpersonationInfoDep
 from mellea_api.core.deps import AdminUser as AdminUserDep
+from mellea_api.core.security import create_access_token, create_impersonation_token
 from mellea_api.models.user import User, UserQuotas, UserRole, UserStatus
 from mellea_api.services.auth import AuthService, get_auth_service
 from mellea_api.services.quota import QuotaService, get_quota_service
@@ -466,4 +468,159 @@ async def get_user_quota_details(
             "role": user.role.value,
         },
         "quotas": quota_status,
+    }
+
+
+# --- Impersonation Endpoints ---
+
+
+class ImpersonationTokenResponse(BaseModel):
+    """Response containing an impersonation token."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    token: str
+    expires_at: datetime = Field(serialization_alias="expiresAt")
+    target_user_id: str = Field(serialization_alias="targetUserId")
+    target_user_email: str = Field(serialization_alias="targetUserEmail")
+    target_user_name: str = Field(serialization_alias="targetUserName")
+    target_user_role: str = Field(serialization_alias="targetUserRole")
+    impersonator_id: str = Field(serialization_alias="impersonatorId")
+    impersonator_email: str = Field(serialization_alias="impersonatorEmail")
+
+
+class StopImpersonationResponse(BaseModel):
+    """Response when stopping impersonation."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    token: str
+    expires_at: datetime = Field(serialization_alias="expiresAt")
+    message: str
+
+
+@router.post("/impersonate/{user_id}", response_model=ImpersonationTokenResponse)
+async def start_impersonation(
+    user_id: str,
+    current_user: AdminUserDep,
+    auth_service: AuthServiceDep,
+) -> ImpersonationTokenResponse:
+    """Start impersonating another user.
+
+    This allows an admin to view the system as another user would see it,
+    useful for troubleshooting user issues.
+
+    Only admins can impersonate, and admins cannot impersonate themselves
+    or other admins.
+    """
+    # Prevent self-impersonation
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot impersonate yourself",
+        )
+
+    # Get the target user
+    target_user = auth_service.get_user_by_id(user_id)
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    # Prevent impersonating other admins
+    if target_user.role == UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot impersonate other administrators",
+        )
+
+    # Prevent impersonating suspended users
+    if target_user.status != UserStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot impersonate a {target_user.status.value} user",
+        )
+
+    # Create impersonation token
+    token, expires_at = create_impersonation_token(
+        target_user_id=target_user.id,
+        target_email=target_user.email,
+        target_name=target_user.display_name,
+        target_role=target_user.role,
+        impersonator_id=current_user.id,
+        impersonator_email=current_user.email,
+    )
+
+    return ImpersonationTokenResponse(
+        token=token,
+        expires_at=expires_at,
+        target_user_id=target_user.id,
+        target_user_email=target_user.email,
+        target_user_name=target_user.display_name,
+        target_user_role=target_user.role.value,
+        impersonator_id=current_user.id,
+        impersonator_email=current_user.email,
+    )
+
+
+@router.post("/stop-impersonate", response_model=StopImpersonationResponse)
+async def stop_impersonation(
+    actual_admin: Annotated[User, Depends(ActualAdminUser)],
+    impersonation_info: ImpersonationInfoDep,
+) -> StopImpersonationResponse:
+    """Stop impersonating and return to the admin's own session.
+
+    This endpoint can be called even when not impersonating (returns the same token).
+    """
+    if impersonation_info is None:
+        # Not impersonating, just return a fresh token for the current admin
+        token, expires_at = create_access_token(
+            user_id=actual_admin.id,
+            email=actual_admin.email,
+            name=actual_admin.display_name,
+            role=actual_admin.role,
+        )
+        return StopImpersonationResponse(
+            token=token,
+            expires_at=expires_at,
+            message="No active impersonation session",
+        )
+
+    # Generate a new regular token for the admin
+    token, expires_at = create_access_token(
+        user_id=actual_admin.id,
+        email=actual_admin.email,
+        name=actual_admin.display_name,
+        role=actual_admin.role,
+    )
+
+    return StopImpersonationResponse(
+        token=token,
+        expires_at=expires_at,
+        message=f"Stopped impersonating {impersonation_info.target_user.display_name}",
+    )
+
+
+@router.get("/impersonation-status")
+async def get_impersonation_status(
+    impersonation_info: ImpersonationInfoDep,
+) -> dict[str, Any]:
+    """Check if the current session is an impersonation session.
+
+    Returns information about the impersonation if active.
+    """
+    if impersonation_info is None:
+        return {
+            "isImpersonating": False,
+        }
+
+    return {
+        "isImpersonating": True,
+        "impersonatorId": impersonation_info.impersonator_id,
+        "impersonatorEmail": impersonation_info.impersonator_email,
+        "targetUserId": impersonation_info.target_user.id,
+        "targetUserEmail": impersonation_info.target_user.email,
+        "targetUserName": impersonation_info.target_user.display_name,
+        "targetUserRole": impersonation_info.target_user.role.value,
     }

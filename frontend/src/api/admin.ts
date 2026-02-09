@@ -1,4 +1,4 @@
-import apiClient from './client';
+import apiClient, { setToken } from './client';
 import type { User, UserRole, UserStatus, UserQuotas } from '@/types';
 
 export interface AdminUserStats {
@@ -69,6 +69,33 @@ export interface UpdateUserRequest {
   quotas?: Partial<UserQuotas>;
 }
 
+export interface ImpersonationTokenResponse {
+  token: string;
+  expiresAt: string;
+  targetUserId: string;
+  targetUserEmail: string;
+  targetUserName: string;
+  targetUserRole: string;
+  impersonatorId: string;
+  impersonatorEmail: string;
+}
+
+export interface StopImpersonationResponse {
+  token: string;
+  expiresAt: string;
+  message: string;
+}
+
+export interface ImpersonationStatus {
+  isImpersonating: boolean;
+  impersonatorId?: string;
+  impersonatorEmail?: string;
+  targetUserId?: string;
+  targetUserEmail?: string;
+  targetUserName?: string;
+  targetUserRole?: string;
+}
+
 export const adminApi = {
   // Get user statistics
   getUserStats: async (): Promise<AdminUserStats> => {
@@ -120,6 +147,28 @@ export const adminApi = {
   // Get quota details for a specific user
   getUserQuotaDetails: async (userId: string): Promise<{ user: { id: string; displayName: string; email: string; role: string }; quotas: Record<string, unknown> }> => {
     const response = await apiClient.get(`/admin/quotas/user/${userId}`);
+    return response.data;
+  },
+
+  // Start impersonating a user
+  startImpersonation: async (userId: string): Promise<ImpersonationTokenResponse> => {
+    const response = await apiClient.post<ImpersonationTokenResponse>(`/admin/impersonate/${userId}`);
+    // Set the impersonation token
+    setToken(response.data.token);
+    return response.data;
+  },
+
+  // Stop impersonating and return to admin session
+  stopImpersonation: async (): Promise<StopImpersonationResponse> => {
+    const response = await apiClient.post<StopImpersonationResponse>('/admin/stop-impersonate');
+    // Set the admin's regular token
+    setToken(response.data.token);
+    return response.data;
+  },
+
+  // Get current impersonation status
+  getImpersonationStatus: async (): Promise<ImpersonationStatus> => {
+    const response = await apiClient.get<ImpersonationStatus>('/admin/impersonation-status');
     return response.data;
   },
 };

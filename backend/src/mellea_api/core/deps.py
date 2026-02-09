@@ -327,12 +327,129 @@ def require_permission(
     return permission_checker
 
 
+class ImpersonationInfo:
+    """Information about an active impersonation session."""
+
+    def __init__(
+        self,
+        impersonator_id: str,
+        impersonator_email: str,
+        target_user: User,
+    ) -> None:
+        self.impersonator_id = impersonator_id
+        self.impersonator_email = impersonator_email
+        self.target_user = target_user
+
+
+async def get_impersonation_info(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+) -> ImpersonationInfo | None:
+    """Get impersonation info if the current session is an impersonation.
+
+    Returns:
+        ImpersonationInfo if this is an impersonation session, None otherwise
+    """
+    if credentials is None:
+        return None
+
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
+        return None
+
+    # Check if this is an impersonation token
+    if not payload.get("is_impersonation"):
+        return None
+
+    # Get the target user
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+
+    auth_service = get_auth_service()
+    target_user = auth_service.get_user_by_id(user_id)
+
+    if target_user is None:
+        return None
+
+    return ImpersonationInfo(
+        impersonator_id=payload.get("impersonator_id", ""),
+        impersonator_email=payload.get("impersonator_email", ""),
+        target_user=target_user,
+    )
+
+
+async def get_actual_admin_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+) -> User:
+    """Get the actual admin user, even during impersonation.
+
+    During impersonation, this returns the admin who is impersonating.
+    Without impersonation, this returns the current user (if admin).
+
+    Returns:
+        The actual admin user
+
+    Raises:
+        HTTPException: 401 if not authenticated, 403 if not admin
+    """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    auth_service = get_auth_service()
+
+    # If impersonating, get the impersonator
+    if payload.get("is_impersonation"):
+        impersonator_id = payload.get("impersonator_id")
+        if not impersonator_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid impersonation token",
+            )
+        user = auth_service.get_user_by_id(impersonator_id)
+    else:
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload",
+            )
+        user = auth_service.get_user_by_id(user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    return user
+
+
 # Type aliases for common dependencies
 CurrentUser = Annotated[User, Depends(get_current_user)]
 CurrentUserSSE = Annotated[User, Depends(get_current_user_sse)]
 OptionalUser = Annotated[User | None, Depends(get_current_user_optional)]
 AdminUser = Annotated[User, Depends(require_role(UserRole.ADMIN))]
 DeveloperUser = Annotated[User, Depends(require_role(UserRole.DEVELOPER))]
+ActualAdminUser = Annotated[User, Depends(get_actual_admin_user)]
+ImpersonationInfoDep = Annotated[ImpersonationInfo | None, Depends(get_impersonation_info)]
 
 # Service dependencies
 PermissionServiceDep = Annotated[PermissionService, Depends(get_permission_service)]

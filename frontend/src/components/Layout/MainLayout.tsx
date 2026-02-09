@@ -1,11 +1,13 @@
 import { Box, Flex } from '@chakra-ui/react';
 import { Outlet } from 'react-router-dom';
 import { Header } from './Header';
+import { ImpersonationBanner } from './ImpersonationBanner';
 import { Sidebar } from './Sidebar';
 
 export function MainLayout() {
   return (
     <Box minH="100vh">
+      <ImpersonationBanner />
       <Header />
       <Flex>
         <Sidebar />
