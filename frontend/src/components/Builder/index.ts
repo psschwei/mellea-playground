@@ -91,3 +91,16 @@ export {
   type AutoLayoutOptions,
 } from './autoLayout';
 export { NodeLogsPanel, type NodeLogsPanelProps } from './NodeLogsPanel';
+
+// Zustand store for state management with undo/redo and auto-save
+export {
+  useCompositionStore,
+  useSelectedNode,
+  useAutoSaveStatus,
+  useUndoRedo,
+  useDirtyState,
+  useValidationError,
+  useCompositionPersistence,
+  type SerializableComposition as StoreSerializableComposition,
+  type PersistenceConfig,
+} from './store';
