@@ -8,12 +8,13 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # NGINX Ingress Controller version for Kind
 # See: https://github.com/kubernetes/ingress-nginx/releases
-INGRESS_NGINX_VERSION="v1.12.0"
+INGRESS_NGINX_VERSION="v1.14.3"
 
 echo "==> Installing NGINX Ingress Controller ${INGRESS_NGINX_VERSION} for Kind..."
 
 # Apply the official Kind-specific manifest
-kubectl apply -f "https://raw.githubusercontent.com/kubernetes/ingress-nginx/${INGRESS_NGINX_VERSION}/deploy/static/provider/kind/deploy.yaml"
+# Note: GitHub tag format is "controller-vX.Y.Z"
+kubectl apply -f "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${INGRESS_NGINX_VERSION}/deploy/static/provider/kind/deploy.yaml"
 
 # Wait for the ingress controller to be ready
 echo "==> Waiting for Ingress Controller to be ready..."
