@@ -1,5 +1,5 @@
-import apiClient from './client';
 import type { ProgramAsset } from '@/types';
+import { delay, generateId, now, programs, currentUserId } from './mock-store';
 
 // Request/Response types
 
@@ -96,46 +96,83 @@ export interface CancelResponse {
 }
 
 export const githubImportApi = {
-  /**
-   * Analyze a GitHub repository for import
-   */
   analyze: async (request: AnalyzeRequest): Promise<AnalyzeResponse> => {
-    const response = await apiClient.post<AnalyzeResponse>(
-      '/programs/import/github/analyze',
-      request
-    );
-    return response.data;
+    await delay(800);
+    const sessionId = generateId();
+    return {
+      status: 'analyzed',
+      analysis: {
+        rootFiles: ['main.py', 'setup.py', 'README.md', 'requirements.txt'],
+        pythonProjects: [
+          {
+            path: '.',
+            entrypoint: 'main.py',
+            confidence: 0.95,
+            indicators: ['main.py exists', 'setup.py found', 'requirements.txt found'],
+          },
+        ],
+        detectedDependencies: {
+          source: 'requirements',
+          packages: [
+            { name: 'requests', version: '2.31.0' },
+            { name: 'click', version: '8.1.7' },
+          ],
+          pythonVersion: '3.11',
+        },
+        detectedSlots: [],
+        repoSize: 45000,
+        fileCount: 12,
+      },
+      sessionId,
+      repoUrl: request.repoUrl,
+      branch: request.branch || 'main',
+      commitSha: 'abc123def456789',
+    };
   },
 
-  /**
-   * Confirm and complete the import
-   */
   confirm: async (request: ConfirmRequest): Promise<ConfirmResponse> => {
-    const response = await apiClient.post<ConfirmResponse>(
-      '/programs/import/github/confirm',
-      request
-    );
-    return response.data;
+    await delay(400);
+    const id = generateId();
+    const program: ProgramAsset = {
+      id,
+      type: 'program',
+      name: request.metadata.name,
+      description: request.metadata.description || '',
+      tags: request.metadata.tags || ['github-import'],
+      version: '1.0.0',
+      owner: currentUserId || 'unknown',
+      sharing: 'private',
+      createdAt: now(),
+      updatedAt: now(),
+      entrypoint: request.entrypoint || 'main.py',
+      sourceCode: '# Imported from GitHub\ndef main():\n    print("Hello from GitHub import!")\n\nif __name__ == "__main__":\n    main()\n',
+      dependencies: request.dependencies,
+      imageBuildStatus: 'pending',
+    };
+    programs.set(id, program);
+    return {
+      asset: program,
+      importSource: {
+        type: 'github',
+        repoUrl: 'https://github.com/user/repo',
+        branch: 'main',
+        commit: 'abc123def456789',
+        importedAt: now(),
+      },
+    };
   },
 
-  /**
-   * Cancel an import session
-   */
-  cancel: async (sessionId: string): Promise<CancelResponse> => {
-    const response = await apiClient.delete<CancelResponse>(
-      `/programs/import/github/session/${sessionId}`
-    );
-    return response.data;
+  cancel: async (_sessionId: string): Promise<CancelResponse> => {
+    await delay();
+    return { cancelled: true, message: 'Import session cancelled.' };
   },
 
-  /**
-   * Validate a GitHub URL without cloning
-   */
   validateUrl: async (url: string): Promise<ValidateUrlResponse> => {
-    const response = await apiClient.post<ValidateUrlResponse>(
-      '/programs/import/github/validate-url',
-      { url }
-    );
-    return response.data;
+    await delay(200);
+    const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (match) {
+      return { valid: true, owner: match[1], repo: match[2], branch: 'main' };
+    }
+    return { valid: false };
   },
 };

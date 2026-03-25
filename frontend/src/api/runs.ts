@@ -1,14 +1,5 @@
-import apiClient from './client';
 import type { Run, CreateRunRequest, RunExecutionStatus, SharingMode, Permission } from '@/types';
-
-interface RunResponse {
-  run: Run;
-}
-
-interface RunsListResponse {
-  runs: Run[];
-  total: number;
-}
+import { delay, generateId, now, runs, currentUserId, simulateRunExecution } from './mock-store';
 
 interface BulkDeleteResponse {
   results: Record<string, boolean | string>;
@@ -23,107 +14,78 @@ interface ListRunsParams {
   includeShared?: boolean;
 }
 
-interface UpdateVisibilityRequest {
-  visibility: SharingMode;
-}
-
-interface ShareRunRequest {
-  userId: string;
-  permission?: Permission;
-}
-
 interface SharedUserResponse {
   userId: string;
   permission: Permission;
 }
 
-interface SharedUsersListResponse {
-  users: SharedUserResponse[];
-  total: number;
-}
-
 export const runsApi = {
-  /**
-   * Create and start a new run
-   */
   create: async (data: CreateRunRequest): Promise<Run> => {
-    const response = await apiClient.post<RunResponse>('/runs', data);
-    return response.data.run;
+    await delay(150);
+    const id = generateId();
+    const run: Run = {
+      id,
+      ownerId: currentUserId || 'unknown',
+      programId: data.programId,
+      status: 'queued',
+      visibility: 'private',
+      createdAt: now(),
+    };
+    runs.set(id, run);
+    simulateRunExecution(id);
+    return run;
   },
 
-  /**
-   * Get a run by ID
-   */
   get: async (id: string): Promise<Run> => {
-    const response = await apiClient.get<RunResponse>(`/runs/${id}`);
-    return response.data.run;
+    await delay();
+    const run = runs.get(id);
+    if (!run) throw { response: { status: 404, data: { detail: 'Run not found' } } };
+    return run;
   },
 
-  /**
-   * List runs with optional filters
-   */
   list: async (params?: ListRunsParams): Promise<Run[]> => {
-    try {
-      const response = await apiClient.get<RunsListResponse>('/runs', {
-        params: params,
-      });
-      return response.data.runs;
-    } catch {
-      console.warn('List runs endpoint not available, returning empty array');
-      return [];
-    }
+    await delay();
+    let result = Array.from(runs.values());
+    if (params?.programId) result = result.filter((r) => r.programId === params.programId);
+    if (params?.status) result = result.filter((r) => r.status === params.status);
+    if (params?.visibility) result = result.filter((r) => r.visibility === params.visibility);
+    return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
-  /**
-   * List runs for a program
-   */
   listByProgram: async (programId: string): Promise<Run[]> => {
     return runsApi.list({ programId });
   },
 
-  /**
-   * Cancel a running execution
-   */
   cancel: async (id: string): Promise<Run> => {
-    const response = await apiClient.post<RunResponse>(`/runs/${id}/cancel`);
-    return response.data.run;
+    await delay();
+    const run = runs.get(id);
+    if (!run) throw { response: { status: 404, data: { detail: 'Run not found' } } };
+    run.status = 'cancelled';
+    run.completedAt = now();
+    return run;
   },
 
-  /**
-   * Poll for run status updates
-   * Returns when status changes or timeout reached
-   */
   pollStatus: async (
     id: string,
     currentStatus: string,
     timeoutMs: number = 30000
   ): Promise<Run> => {
     const startTime = Date.now();
-    const pollInterval = 1000; // 1 second
+    const pollInterval = 500;
 
     while (Date.now() - startTime < timeoutMs) {
       const run = await runsApi.get(id);
-      if (run.status !== currentStatus) {
-        return run;
-      }
-      // Wait before next poll
+      if (run.status !== currentStatus) return run;
       await new Promise((resolve) => setTimeout(resolve, pollInterval));
     }
-
-    // Return latest state on timeout
     return runsApi.get(id);
   },
 
-  /**
-   * Download run logs as a text file
-   */
   downloadLogs: async (id: string): Promise<void> => {
-    const response = await apiClient.get(`/runs/${id}/logs/download`, {
-      responseType: 'blob',
-    });
-
-    // Create download link and trigger download
-    const blob = new Blob([response.data], { type: 'text/plain' });
+    await delay();
+    const run = runs.get(id);
+    const content = run?.output || `Logs for run ${id}\nNo output captured.`;
+    const blob = new Blob([content], { type: 'text/plain' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -134,68 +96,63 @@ export const runsApi = {
     window.URL.revokeObjectURL(url);
   },
 
-  /**
-   * Delete a run by ID
-   * Only works for runs in terminal states (succeeded, failed, cancelled)
-   */
   delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/runs/${id}`);
+    await delay();
+    runs.delete(id);
   },
 
-  /**
-   * Delete multiple runs at once
-   * Only runs in terminal states can be deleted
-   * Returns results for each run
-   */
   bulkDelete: async (runIds: string[]): Promise<BulkDeleteResponse> => {
-    const response = await apiClient.post<BulkDeleteResponse>('/runs/bulk-delete', {
-      runIds,
-    });
-    return response.data;
+    await delay();
+    const results: Record<string, boolean | string> = {};
+    let deletedCount = 0;
+    let failedCount = 0;
+    for (const rid of runIds) {
+      const run = runs.get(rid);
+      if (run && ['succeeded', 'failed', 'cancelled'].includes(run.status)) {
+        runs.delete(rid);
+        results[rid] = true;
+        deletedCount++;
+      } else {
+        results[rid] = run ? 'Run is not in a terminal state' : 'Not found';
+        failedCount++;
+      }
+    }
+    return { results, deletedCount, failedCount };
   },
 
-  /**
-   * Update a run's visibility mode
-   * Only the run owner can change visibility
-   */
   updateVisibility: async (id: string, visibility: SharingMode): Promise<Run> => {
-    const response = await apiClient.patch<RunResponse>(`/runs/${id}/visibility`, {
-      visibility,
-    } as UpdateVisibilityRequest);
-    return response.data.run;
+    await delay();
+    const run = runs.get(id);
+    if (!run) throw { response: { status: 404, data: { detail: 'Run not found' } } };
+    run.visibility = visibility;
+    return run;
   },
 
-  /**
-   * Share a run with a specific user
-   * Only the run owner can share runs
-   */
   shareWithUser: async (
     id: string,
     userId: string,
     permission: Permission = 'view'
   ): Promise<Run> => {
-    const response = await apiClient.post<RunResponse>(`/runs/${id}/share`, {
-      userId,
-      permission,
-    } as ShareRunRequest);
-    return response.data.run;
+    await delay();
+    const run = runs.get(id);
+    if (!run) throw { response: { status: 404, data: { detail: 'Run not found' } } };
+    if (!run.sharedWith) run.sharedWith = [];
+    run.sharedWith.push({ type: 'user', id: userId, permission });
+    return run;
   },
 
-  /**
-   * Revoke a user's access to a run
-   * Only the run owner can revoke access
-   */
   revokeAccess: async (id: string, userId: string): Promise<Run> => {
-    const response = await apiClient.delete<RunResponse>(`/runs/${id}/share/${userId}`);
-    return response.data.run;
+    await delay();
+    const run = runs.get(id);
+    if (!run) throw { response: { status: 404, data: { detail: 'Run not found' } } };
+    run.sharedWith = (run.sharedWith || []).filter((s) => s.id !== userId);
+    return run;
   },
 
-  /**
-   * Get list of users a run is shared with
-   * Only the run owner can view this list
-   */
   getSharedUsers: async (id: string): Promise<SharedUserResponse[]> => {
-    const response = await apiClient.get<SharedUsersListResponse>(`/runs/${id}/shared-users`);
-    return response.data.users;
+    await delay();
+    const run = runs.get(id);
+    if (!run) throw { response: { status: 404, data: { detail: 'Run not found' } } };
+    return (run.sharedWith || []).map((s) => ({ userId: s.id, permission: s.permission }));
   },
 };

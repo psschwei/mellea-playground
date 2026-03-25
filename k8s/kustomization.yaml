@@ -1,9 +1,0 @@
-# Root kustomization - redirects to KinD overlay for backwards compatibility
-# For explicit overlay selection, use:
-#   kubectl apply -k k8s/overlays/kind/
-#   kubectl apply -k k8s/overlays/openshift/
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-resources:
-  - overlays/kind

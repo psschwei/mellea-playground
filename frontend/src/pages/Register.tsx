@@ -15,7 +15,6 @@ import {
 } from '@chakra-ui/react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks';
-import { AxiosError } from 'axios';
 import type { ApiError } from '@/types';
 
 export function RegisterPage() {
@@ -44,8 +43,8 @@ export function RegisterPage() {
       });
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      const axiosError = err as AxiosError<ApiError>;
-      setError(axiosError.response?.data?.detail || 'Registration failed');
+      const mockErr = err as { response?: { data?: ApiError } };
+      setError(mockErr.response?.data?.detail || 'Registration failed');
     } finally {
       setIsLoading(false);
     }

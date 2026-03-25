@@ -1,14 +1,19 @@
-/**
- * API client for composition runs - manages composition workflow execution.
- */
-import apiClient from './client';
 import type { RunExecutionStatus } from '@/types';
+import {
+  delay,
+  generateId,
+  now,
+  compositionRuns,
+  compositions,
+  currentUserId,
+  simulateCompositionRunExecution,
+  runLogs,
+} from './mock-store';
 
 // =============================================================================
 // Types
 // =============================================================================
 
-/** Status for individual nodes during execution */
 export type NodeExecutionStatus =
   | 'pending'
   | 'running'
@@ -16,7 +21,6 @@ export type NodeExecutionStatus =
   | 'failed'
   | 'skipped';
 
-/** Execution state for a single node */
 export interface NodeExecutionState {
   nodeId: string;
   status: NodeExecutionStatus;
@@ -27,7 +31,6 @@ export interface NodeExecutionState {
   logs: string[];
 }
 
-/** Composition run model */
 export interface CompositionRun {
   id: string;
   ownerId: string;
@@ -50,7 +53,6 @@ export interface CompositionRun {
   credentialIds: string[];
 }
 
-/** Request to create a new composition run */
 export interface CreateCompositionRunRequest {
   compositionId: string;
   environmentId: string;
@@ -59,7 +61,6 @@ export interface CreateCompositionRunRequest {
   validate?: boolean;
 }
 
-/** Progress response from the API */
 export interface ProgressResponse {
   total: number;
   pending: number;
@@ -71,7 +72,6 @@ export interface ProgressResponse {
   nodeStates: Record<string, NodeExecutionState>;
 }
 
-/** Validation result response */
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
@@ -80,14 +80,12 @@ export interface ValidationResult {
   modelIds: string[];
 }
 
-/** Generated code response */
 export interface GeneratedCodeResponse {
   code: string;
   executionOrder: string[];
   warnings: string[];
 }
 
-/** Resume run response */
 export interface ResumeRunResponse {
   run: CompositionRun;
   originalRunId: string;
@@ -96,148 +94,164 @@ export interface ResumeRunResponse {
 }
 
 // =============================================================================
-// API Response Wrappers
-// =============================================================================
-
-interface CompositionRunResponse {
-  run: CompositionRun;
-}
-
-interface CompositionRunsListResponse {
-  runs: CompositionRun[];
-  total: number;
-}
-
-// =============================================================================
 // API Client
 // =============================================================================
 
 export const compositionRunsApi = {
-  /**
-   * Create and submit a new composition run.
-   * Validates the composition, generates code, and submits a K8s job.
-   */
   create: async (data: CreateCompositionRunRequest): Promise<CompositionRun> => {
-    const response = await apiClient.post<CompositionRunResponse>(
-      '/composition-runs',
-      data
-    );
-    return response.data.run;
+    await delay(200);
+    const comp = compositions.get(data.compositionId);
+    const executionOrder = comp?.spec?.nodeExecutionOrder || ['node-1', 'node-2', 'node-3'];
+    const id = generateId();
+
+    const nodeStates: Record<string, NodeExecutionState> = {};
+    for (const nid of executionOrder) {
+      nodeStates[nid] = {
+        nodeId: nid,
+        status: 'pending',
+        startedAt: null,
+        completedAt: null,
+        output: null,
+        errorMessage: null,
+        logs: [],
+      };
+    }
+
+    const run: CompositionRun = {
+      id,
+      ownerId: currentUserId || 'unknown',
+      environmentId: data.environmentId,
+      compositionId: data.compositionId,
+      status: 'queued',
+      jobName: `comp-job-${id.slice(0, 8)}`,
+      exitCode: null,
+      errorMessage: null,
+      createdAt: now(),
+      startedAt: null,
+      completedAt: null,
+      output: null,
+      executionOrder,
+      nodeStates,
+      generatedCode: `# Auto-generated composition runner\nimport asyncio\n\nasync def run_composition():\n${executionOrder.map((n) => `    await execute_node("${n}")`).join('\n')}\n\nasyncio.run(run_composition())\n`,
+      inputs: data.inputs || {},
+      outputs: {},
+      currentNodeId: null,
+      credentialIds: data.credentialIds || [],
+    };
+    compositionRuns.set(id, run);
+    simulateCompositionRunExecution(id);
+    return run;
   },
 
-  /**
-   * Get a composition run by ID.
-   */
   get: async (id: string): Promise<CompositionRun> => {
-    const response = await apiClient.get<CompositionRunResponse>(
-      `/composition-runs/${id}`
-    );
-    return response.data.run;
+    await delay();
+    const run = compositionRuns.get(id);
+    if (!run) throw { response: { status: 404, data: { detail: 'Composition run not found' } } };
+    return run;
   },
 
-  /**
-   * List composition runs with optional filters.
-   */
   list: async (params?: {
     compositionId?: string;
     status?: RunExecutionStatus;
   }): Promise<CompositionRun[]> => {
-    const response = await apiClient.get<CompositionRunsListResponse>(
-      '/composition-runs',
-      { params }
-    );
-    return response.data.runs;
+    await delay();
+    let result = Array.from(compositionRuns.values());
+    if (params?.compositionId) result = result.filter((r) => r.compositionId === params.compositionId);
+    if (params?.status) result = result.filter((r) => r.status === params.status);
+    return result;
   },
 
-  /**
-   * Get execution progress for a composition run.
-   * Returns node states and current execution status.
-   */
   getProgress: async (id: string): Promise<ProgressResponse> => {
-    const response = await apiClient.get<ProgressResponse>(
-      `/composition-runs/${id}/progress`
-    );
-    return response.data;
+    await delay();
+    const run = compositionRuns.get(id);
+    if (!run) throw { response: { status: 404, data: { detail: 'Composition run not found' } } };
+    const states = Object.values(run.nodeStates);
+    return {
+      total: states.length,
+      pending: states.filter((s) => s.status === 'pending').length,
+      running: states.filter((s) => s.status === 'running').length,
+      succeeded: states.filter((s) => s.status === 'succeeded').length,
+      failed: states.filter((s) => s.status === 'failed').length,
+      skipped: states.filter((s) => s.status === 'skipped').length,
+      currentNodeId: run.currentNodeId,
+      nodeStates: run.nodeStates,
+    };
   },
 
-  /**
-   * Cancel a running composition.
-   */
-  cancel: async (id: string, force = false): Promise<CompositionRun> => {
-    const response = await apiClient.post<CompositionRunResponse>(
-      `/composition-runs/${id}/cancel`,
-      null,
-      { params: { force } }
-    );
-    return response.data.run;
+  cancel: async (id: string, _force = false): Promise<CompositionRun> => {
+    await delay();
+    const run = compositionRuns.get(id);
+    if (!run) throw { response: { status: 404, data: { detail: 'Composition run not found' } } };
+    run.status = 'cancelled';
+    run.completedAt = now();
+    return run;
   },
 
-  /**
-   * Manually sync a composition run's status with its K8s job.
-   */
   sync: async (id: string): Promise<CompositionRun> => {
-    const response = await apiClient.post<CompositionRunResponse>(
-      `/composition-runs/${id}/sync`
-    );
-    return response.data.run;
+    await delay();
+    const run = compositionRuns.get(id);
+    if (!run) throw { response: { status: 404, data: { detail: 'Composition run not found' } } };
+    return run;
   },
 
-  /**
-   * Resume a failed composition run from a specific node.
-   * Creates a new run that reuses outputs from succeeded nodes and
-   * re-executes starting from the failed node (or specified node).
-   */
   resume: async (
     id: string,
     options?: { fromNodeId?: string }
   ): Promise<ResumeRunResponse> => {
-    const response = await apiClient.post<ResumeRunResponse>(
-      `/composition-runs/${id}/resume`,
-      options?.fromNodeId ? { fromNodeId: options.fromNodeId } : undefined
-    );
-    return response.data;
-  },
+    await delay(200);
+    const originalRun = compositionRuns.get(id);
+    if (!originalRun) throw { response: { status: 404, data: { detail: 'Composition run not found' } } };
 
-  /**
-   * Validate a composition for execution.
-   */
-  validate: async (compositionId: string): Promise<ValidationResult> => {
-    const response = await apiClient.post<ValidationResult>(
-      `/composition-runs/validate/${compositionId}`
-    );
-    return response.data;
-  },
+    const resumeFrom = options?.fromNodeId || originalRun.executionOrder[0];
+    const resumeIdx = originalRun.executionOrder.indexOf(resumeFrom);
+    const skippedNodes = originalRun.executionOrder.slice(0, resumeIdx);
 
-  /**
-   * Generate executable Python code from a composition.
-   */
-  generateCode: async (compositionId: string): Promise<GeneratedCodeResponse> => {
-    const response = await apiClient.post<GeneratedCodeResponse>(
-      `/composition-runs/generate/${compositionId}`
-    );
-    return response.data;
-  },
-
-  /**
-   * Get the generated Python code for a composition run.
-   */
-  getCode: async (id: string): Promise<string> => {
-    const response = await apiClient.get<string>(
-      `/composition-runs/${id}/code`,
-      { responseType: 'text' as const }
-    );
-    return response.data;
-  },
-
-  /**
-   * Download composition run logs as a text file.
-   */
-  downloadLogs: async (id: string): Promise<void> => {
-    const response = await apiClient.get(`/composition-runs/${id}/logs/download`, {
-      responseType: 'blob',
+    const newRun = await compositionRunsApi.create({
+      compositionId: originalRun.compositionId,
+      environmentId: originalRun.environmentId,
+      inputs: originalRun.inputs,
+      credentialIds: originalRun.credentialIds,
     });
 
-    const blob = new Blob([response.data], { type: 'text/plain' });
+    return {
+      run: newRun,
+      originalRunId: id,
+      resumedFromNode: resumeFrom,
+      skippedNodes,
+    };
+  },
+
+  validate: async (_compositionId: string): Promise<ValidationResult> => {
+    await delay(300);
+    return {
+      valid: true,
+      errors: [],
+      warnings: [],
+      programIds: [],
+      modelIds: [],
+    };
+  },
+
+  generateCode: async (_compositionId: string): Promise<GeneratedCodeResponse> => {
+    await delay(400);
+    return {
+      code: '# Auto-generated composition code\nimport asyncio\n\nasync def run():\n    print("Running composition...")\n    await asyncio.sleep(1)\n    print("Done!")\n\nasyncio.run(run())\n',
+      executionOrder: ['node-1', 'node-2'],
+      warnings: [],
+    };
+  },
+
+  getCode: async (id: string): Promise<string> => {
+    await delay();
+    const run = compositionRuns.get(id);
+    return run?.generatedCode || '# No generated code available\n';
+  },
+
+  downloadLogs: async (id: string): Promise<void> => {
+    await delay();
+    const logs = runLogs.get(id) || ['No logs available.'];
+    const content = logs.join('\n');
+    const blob = new Blob([content], { type: 'text/plain' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -248,10 +262,6 @@ export const compositionRunsApi = {
     window.URL.revokeObjectURL(url);
   },
 
-  /**
-   * Poll for composition run progress updates.
-   * Returns when the run reaches a terminal state or timeout.
-   */
   pollProgress: async (
     id: string,
     onProgress: (progress: ProgressResponse) => void,
@@ -260,25 +270,19 @@ export const compositionRunsApi = {
       timeoutMs?: number;
     }
   ): Promise<CompositionRun> => {
-    const { intervalMs = 1000, timeoutMs = 300000 } = options || {};
+    const { intervalMs = 500, timeoutMs = 300000 } = options || {};
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeoutMs) {
       const run = await compositionRunsApi.get(id);
       const progress = await compositionRunsApi.getProgress(id);
-
       onProgress(progress);
 
-      // Check if run is in terminal state
       if (['succeeded', 'failed', 'cancelled'].includes(run.status)) {
         return run;
       }
-
-      // Wait before next poll
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
-
-    // Return latest state on timeout
     return compositionRunsApi.get(id);
   },
 };

@@ -1,4 +1,3 @@
-import apiClient from './client';
 import type {
   Credential,
   CredentialSharedAccess,
@@ -9,93 +8,113 @@ import type {
   CredentialType,
   ModelProvider,
 } from '@/types';
+import { delay, generateId, now, credentials, currentUserId } from './mock-store';
 
 interface ListCredentialsParams {
   type?: CredentialType;
   provider?: ModelProvider | string;
 }
 
+function filterCredentials(params?: ListCredentialsParams): Credential[] {
+  let result = Array.from(credentials.values());
+  if (params?.type) result = result.filter((c) => c.type === params.type);
+  if (params?.provider) result = result.filter((c) => c.provider === params.provider);
+  return result;
+}
+
 export const credentialsApi = {
-  /**
-   * Create a new credential
-   */
   create: async (data: CreateCredentialRequest): Promise<Credential> => {
-    const response = await apiClient.post<Credential>('/credentials', data);
-    return response.data;
+    await delay(150);
+    const id = generateId();
+    const cred: Credential = {
+      id,
+      name: data.name,
+      description: data.description || '',
+      type: data.type,
+      provider: data.provider,
+      ownerId: currentUserId || 'unknown',
+      tags: data.tags || [],
+      createdAt: now(),
+      updatedAt: now(),
+      expiresAt: data.expiresAt,
+      isExpired: false,
+    };
+    credentials.set(id, cred);
+    return cred;
   },
 
-  /**
-   * Get a credential by ID (metadata only, no secrets)
-   */
   get: async (id: string): Promise<Credential> => {
-    const response = await apiClient.get<Credential>(`/credentials/${id}`);
-    return response.data;
+    await delay();
+    const cred = credentials.get(id);
+    if (!cred) throw { response: { status: 404, data: { detail: 'Credential not found' } } };
+    return cred;
   },
 
-  /**
-   * List credentials for the current user
-   */
   list: async (params?: ListCredentialsParams): Promise<Credential[]> => {
-    const response = await apiClient.get<Credential[]>('/credentials', { params });
-    return response.data;
+    await delay();
+    return filterCredentials(params);
   },
 
-  /**
-   * Update a credential
-   */
   update: async (id: string, data: UpdateCredentialRequest): Promise<Credential> => {
-    const response = await apiClient.put<Credential>(`/credentials/${id}`, data);
-    return response.data;
+    await delay();
+    const cred = credentials.get(id);
+    if (!cred) throw { response: { status: 404, data: { detail: 'Credential not found' } } };
+    if (data.name !== undefined) cred.name = data.name;
+    if (data.description !== undefined) cred.description = data.description;
+    if (data.tags !== undefined) cred.tags = data.tags;
+    if (data.expiresAt !== undefined) cred.expiresAt = data.expiresAt;
+    cred.updatedAt = now();
+    return cred;
   },
 
-  /**
-   * Delete a credential
-   */
   delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/credentials/${id}`);
+    await delay();
+    credentials.delete(id);
   },
 
-  /**
-   * Validate a credential (check if it exists and is not expired)
-   */
-  validate: async (id: string): Promise<{ valid: boolean }> => {
-    const response = await apiClient.post<{ valid: boolean }>(`/credentials/${id}/validate`);
-    return response.data;
+  validate: async (_id: string): Promise<{ valid: boolean }> => {
+    await delay(200);
+    return { valid: true };
   },
 
-  /**
-   * List credentials accessible to the current user (owned or shared)
-   */
   listAccessible: async (params?: ListCredentialsParams): Promise<Credential[]> => {
-    const response = await apiClient.get<Credential[]>('/credentials/accessible', { params });
-    return response.data;
+    await delay();
+    return filterCredentials(params);
   },
 
-  /**
-   * Share a credential with another user
-   */
   share: async (id: string, data: ShareCredentialRequest): Promise<ShareCredentialResponse> => {
-    const response = await apiClient.post<ShareCredentialResponse>(
-      `/credentials/${id}/share`,
-      data,
-    );
-    return response.data;
+    await delay();
+    const cred = credentials.get(id);
+    if (!cred) throw { response: { status: 404, data: { detail: 'Credential not found' } } };
+    const access: CredentialSharedAccess = {
+      type: 'user',
+      id: data.userId,
+      permission: data.permission,
+      sharedAt: now(),
+      sharedBy: currentUserId || 'unknown',
+    };
+    if (!cred.sharedWith) cred.sharedWith = [];
+    cred.sharedWith.push(access);
+    return {
+      credentialId: id,
+      userId: data.userId,
+      permission: data.permission,
+      sharedAt: access.sharedAt,
+      sharedBy: access.sharedBy,
+    };
   },
 
-  /**
-   * List users who have access to a credential
-   */
   listShares: async (id: string): Promise<CredentialSharedAccess[]> => {
-    const response = await apiClient.get<CredentialSharedAccess[]>(
-      `/credentials/${id}/shared-with`,
-    );
-    return response.data;
+    await delay();
+    const cred = credentials.get(id);
+    if (!cred) throw { response: { status: 404, data: { detail: 'Credential not found' } } };
+    return cred.sharedWith || [];
   },
 
-  /**
-   * Revoke a user's access to a credential
-   */
   revokeShare: async (credentialId: string, userId: string): Promise<void> => {
-    await apiClient.delete(`/credentials/${credentialId}/shared-with/${userId}`);
+    await delay();
+    const cred = credentials.get(credentialId);
+    if (!cred) throw { response: { status: 404, data: { detail: 'Credential not found' } } };
+    cred.sharedWith = (cred.sharedWith || []).filter((s) => s.id !== userId);
   },
 };

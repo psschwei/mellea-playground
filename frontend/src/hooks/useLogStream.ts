@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getToken } from '@/api/client';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+import { isAuthenticated } from '@/api/client';
+import { runLogs, runs } from '@/api/mock-store';
 
 export type LogStreamStatus = 'idle' | 'connecting' | 'connected' | 'completed' | 'error';
 
@@ -27,30 +26,26 @@ export function useLogStream(
   const [status, setStatus] = useState<LogStreamStatus>('idle');
   const [finalRunStatus, setFinalRunStatus] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { onComplete, onError } = options;
 
   const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   }, []);
 
   const connect = useCallback(() => {
     if (!runId) return;
 
-    // Clean up any existing connection
     disconnect();
-
-    // Reset state
     setLogs('');
     setError(null);
     setFinalRunStatus(null);
     setStatus('connecting');
 
-    const token = getToken();
-    if (!token) {
+    if (!isAuthenticated()) {
       const authError = new Error('Not authenticated');
       setError(authError);
       setStatus('error');
@@ -58,59 +53,49 @@ export function useLogStream(
       return;
     }
 
-    // EventSource doesn't support custom headers, so we pass token as query param
-    const url = `${API_BASE_URL}/runs/${runId}/logs/stream?token=${encodeURIComponent(token)}`;
-    const eventSource = new EventSource(url);
-    eventSourceRef.current = eventSource;
-
-    eventSource.onopen = () => {
+    // Brief delay to simulate connection establishment
+    setTimeout(() => {
       setStatus('connected');
-    };
+    }, 100);
 
-    eventSource.addEventListener('log', (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data) as {
-          run_id: string;
-          content: string;
-          timestamp: string | null;
-          is_complete: boolean;
-        };
+    // Poll the mock store for log updates
+    let lastLineCount = 0;
 
-        // Append new content to existing logs
-        setLogs((prev) => {
-          if (!prev) return data.content;
-          // If content already includes previous content (full output), replace
-          if (data.content.startsWith(prev)) return data.content;
-          // Otherwise append with newline
-          return prev + '\n' + data.content;
-        });
-      } catch (e) {
-        console.error('Failed to parse log event:', e);
+    intervalRef.current = setInterval(() => {
+      const logLines = runLogs.get(runId) || [];
+      const run = runs.get(runId);
+
+      if (logLines.length > lastLineCount) {
+        const newContent = logLines.slice(lastLineCount).join('\n');
+        setLogs((prev) => (prev ? prev + '\n' + newContent : newContent));
+        lastLineCount = logLines.length;
       }
-    });
 
-    eventSource.addEventListener('complete', (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data) as { status: string };
-        setFinalRunStatus(data.status);
-        setStatus('completed');
-        onComplete?.(data.status);
-      } catch (e) {
-        console.error('Failed to parse complete event:', e);
+      // Check if the run has reached a terminal state
+      if (run && ['succeeded', 'failed', 'cancelled'].includes(run.status)) {
+        // Give a moment for the last logs to arrive
+        setTimeout(() => {
+          // Grab any final log lines
+          const finalLines = runLogs.get(runId) || [];
+          if (finalLines.length > lastLineCount) {
+            const remaining = finalLines.slice(lastLineCount).join('\n');
+            setLogs((prev) => (prev ? prev + '\n' + remaining : remaining));
+          }
+          setFinalRunStatus(run.status);
+          setStatus('completed');
+          onComplete?.(run.status);
+          disconnect();
+        }, 500);
+
+        // Clear the polling interval immediately to prevent duplicate completion
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
       }
-      disconnect();
-    });
-
-    eventSource.onerror = () => {
-      const streamError = new Error('Log stream connection failed');
-      setError(streamError);
-      setStatus('error');
-      onError?.(streamError);
-      disconnect();
-    };
+    }, 400);
   }, [runId, disconnect, onComplete, onError]);
 
-  // Auto-connect when runId changes
   useEffect(() => {
     if (runId) {
       connect();

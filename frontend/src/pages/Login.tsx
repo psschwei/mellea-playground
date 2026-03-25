@@ -15,7 +15,6 @@ import {
 } from '@chakra-ui/react';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks';
-import { AxiosError } from 'axios';
 import type { ApiError } from '@/types';
 
 export function LoginPage() {
@@ -45,8 +44,8 @@ export function LoginPage() {
       });
       navigate(from, { replace: true });
     } catch (err) {
-      const axiosError = err as AxiosError<ApiError>;
-      setError(axiosError.response?.data?.detail || 'Login failed');
+      const mockErr = err as { response?: { data?: ApiError } };
+      setError(mockErr.response?.data?.detail || 'Login failed');
     } finally {
       setIsLoading(false);
     }
@@ -114,7 +113,7 @@ export function LoginPage() {
         </Box>
 
         <Text align="center" fontSize="sm" color="gray.500">
-          Development accounts: admin@mellea.local / admin123
+          Demo accounts: demo@mellea.dev / demo123 &bull; admin@mellea.dev / admin123
         </Text>
       </Stack>
     </Container>

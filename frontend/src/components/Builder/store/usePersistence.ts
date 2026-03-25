@@ -1,13 +1,13 @@
 /**
  * Persistence hook for composition state
  *
- * Connects the Zustand store to the backend API for:
+ * Connects the Zustand store to the mock API for:
  * - Loading compositions
  * - Auto-saving changes
  * - Manual save operations
  */
 import { useEffect, useCallback } from 'react';
-import apiClient from '@/api/client';
+import { compositionsApi } from '@/api/assets';
 import { useCompositionStore, type SerializableComposition } from './compositionStore';
 import type { CompositionAsset } from '@/types';
 
@@ -26,18 +26,6 @@ export interface PersistenceConfig {
   onLoadError?: (error: Error) => void;
 }
 
-/**
- * Hook to manage composition persistence
- *
- * Usage:
- * ```tsx
- * const { save, load, isLoading, isSaving, error } = useCompositionPersistence({
- *   compositionId: 'comp-123',
- *   autoSave: true,
- *   onSaveComplete: (comp) => console.log('Saved:', comp.id),
- * });
- * ```
- */
 export function useCompositionPersistence(config: PersistenceConfig) {
   const {
     compositionId,
@@ -64,28 +52,30 @@ export function useCompositionPersistence(config: PersistenceConfig) {
       const currentMetadata = useCompositionStore.getState().metadata;
 
       try {
-        let response: { data: CompositionAsset };
+        let composition: CompositionAsset;
 
         if (currentMetadata.id) {
-          // Update existing composition
-          response = await apiClient.patch<CompositionAsset>(
-            `/compositions/${currentMetadata.id}`,
-            {
-              graph: {
-                nodes: state.nodes,
-                edges: state.edges,
-                viewport: state.viewport,
-              },
-            }
-          );
+          // Update existing composition via save (which handles versioning)
+          const existing = await compositionsApi.get(currentMetadata.id);
+          composition = await compositionsApi.save({
+            ...existing,
+            graph: {
+              nodes: state.nodes as any,
+              edges: state.edges,
+              viewport: state.viewport,
+            },
+          });
         } else {
           // Create new composition
-          response = await apiClient.post<CompositionAsset>('/compositions', {
+          composition = await compositionsApi.create({
             type: 'composition',
             name: currentMetadata.name || 'Untitled Composition',
             description: currentMetadata.description || '',
+            tags: [],
+            version: '1.0.0',
+            sharing: 'private',
             graph: {
-              nodes: state.nodes,
+              nodes: state.nodes as any,
               edges: state.edges,
               viewport: state.viewport,
             },
@@ -100,13 +90,13 @@ export function useCompositionPersistence(config: PersistenceConfig) {
 
           // Update metadata with the new ID
           setMetadata({
-            id: response.data.id,
-            createdAt: response.data.createdAt,
+            id: composition.id,
+            createdAt: composition.createdAt,
           });
         }
 
         setMetadata({ updatedAt: new Date().toISOString() });
-        onSaveComplete?.(response.data);
+        onSaveComplete?.(composition);
       } catch (error) {
         const err = error instanceof Error ? error : new Error('Save failed');
         onSaveError?.(err);
@@ -120,8 +110,7 @@ export function useCompositionPersistence(config: PersistenceConfig) {
   const load = useCallback(
     async (id: string): Promise<CompositionAsset | null> => {
       try {
-        const response = await apiClient.get<CompositionAsset>(`/compositions/${id}`);
-        const composition = response.data;
+        const composition = await compositionsApi.get(id);
 
         // Load the graph state
         loadState(
@@ -162,10 +151,7 @@ export function useCompositionPersistence(config: PersistenceConfig) {
       await persistToApi(state);
       const currentMetadata = useCompositionStore.getState().metadata;
       if (currentMetadata.id) {
-        const response = await apiClient.get<CompositionAsset>(
-          `/compositions/${currentMetadata.id}`
-        );
-        return response.data;
+        return await compositionsApi.get(currentMetadata.id);
       }
       return null;
     } catch {
@@ -193,7 +179,7 @@ export function useCompositionPersistence(config: PersistenceConfig) {
   return {
     save,
     load,
-    isLoading: false, // Could track this in store if needed
+    isLoading: false,
     isSaving: autoSaveState.isSaving,
     lastSavedAt: autoSaveState.lastSavedAt,
     saveError: autoSaveState.saveError,

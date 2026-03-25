@@ -1,58 +1,62 @@
-import apiClient from './client';
 import type {
   ModelAsset,
   CreateModelRequest,
   TestModelRequest,
   TestModelResponse,
 } from '@/types';
-
-interface AssetResponse {
-  asset: ModelAsset;
-}
+import { delay, generateId, now, models, currentUserId } from './mock-store';
 
 export const modelsApi = {
-  /**
-   * Create a new model configuration
-   */
   create: async (data: CreateModelRequest): Promise<ModelAsset> => {
-    const response = await apiClient.post<AssetResponse>('/assets', data);
-    return response.data.asset;
+    await delay(150);
+    const id = generateId();
+    const model: ModelAsset = {
+      id,
+      type: 'model',
+      name: data.name,
+      description: data.description || '',
+      tags: data.tags || [],
+      version: '1.0.0',
+      owner: currentUserId || 'unknown',
+      sharing: 'private',
+      createdAt: now(),
+      updatedAt: now(),
+      provider: data.provider,
+      modelId: data.modelId,
+      endpoint: data.endpoint,
+      credentialsRef: data.credentialsRef,
+      defaultParams: data.defaultParams,
+      capabilities: data.capabilities,
+      accessControl: data.accessControl,
+      scope: data.scope,
+    };
+    models.set(id, model);
+    return model;
   },
 
-  /**
-   * Get a model by ID
-   */
   get: async (id: string): Promise<ModelAsset> => {
-    const response = await apiClient.get<AssetResponse>(`/assets/${id}`);
-    return response.data.asset;
+    await delay();
+    const model = models.get(id);
+    if (!model) throw { response: { status: 404, data: { detail: 'Model not found' } } };
+    return model;
   },
 
-  /**
-   * List all model assets
-   */
   list: async (): Promise<ModelAsset[]> => {
-    const response = await apiClient.get<{ assets: ModelAsset[]; total: number }>(
-      '/assets',
-      { params: { type: 'model' } }
-    );
-    return response.data.assets;
+    await delay();
+    return Array.from(models.values());
   },
 
-  /**
-   * Delete a model
-   */
   delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/assets/${id}`);
+    await delay();
+    models.delete(id);
   },
 
-  /**
-   * Test model connectivity and configuration
-   */
-  test: async (id: string, request?: TestModelRequest): Promise<TestModelResponse> => {
-    const response = await apiClient.post<TestModelResponse>(
-      `/assets/${id}/test`,
-      request || {}
-    );
-    return response.data;
+  test: async (_id: string, _request?: TestModelRequest): Promise<TestModelResponse> => {
+    await delay(800);
+    return {
+      success: true,
+      response: 'Hello! This is a mock response from the model. Everything is working correctly.',
+      latencyMs: 450,
+    };
   },
 };

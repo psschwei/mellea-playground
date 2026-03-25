@@ -1,4 +1,3 @@
-import apiClient from './client';
 import type {
   CreateShareLinkRequest,
   Permission,
@@ -10,109 +9,150 @@ import type {
   SharedWithMeResponse,
   ShareWithUserRequest,
 } from '@/types';
+import {
+  delay,
+  generateId,
+  now,
+  shareLinks,
+  programs,
+  models,
+  compositions,
+  currentUserId,
+} from './mock-store';
 
-/**
- * Sharing API for managing share links and user sharing
- */
+function findResourceName(resourceId: string): string {
+  const p = programs.get(resourceId);
+  if (p) return p.name;
+  const m = models.get(resourceId);
+  if (m) return m.name;
+  const c = compositions.get(resourceId);
+  if (c) return c.name;
+  return 'Unknown';
+}
+
 export const sharingApi = {
   // =========================================================================
   // Share Link Operations
   // =========================================================================
 
-  /**
-   * Create a new share link for a resource
-   */
   createShareLink: async (request: CreateShareLinkRequest): Promise<ShareLink> => {
-    const response = await apiClient.post<ShareLink>('/sharing/links', request);
-    return response.data;
+    await delay(150);
+    const id = generateId();
+    const token = generateId();
+    const link: ShareLink = {
+      id,
+      token,
+      resourceId: request.resourceId,
+      resourceType: request.resourceType,
+      permission: request.permission || 'view',
+      createdBy: currentUserId || 'unknown',
+      createdAt: now(),
+      expiresAt: request.expiresInHours
+        ? new Date(Date.now() + request.expiresInHours * 3600000).toISOString()
+        : undefined,
+      label: request.label,
+      accessCount: 0,
+      isActive: true,
+      shareUrl: `${window.location.origin}/share/${token}`,
+    };
+    shareLinks.set(id, link);
+    return link;
   },
 
-  /**
-   * List share links for a resource or all links created by the current user
-   */
   listShareLinks: async (params?: {
     resourceId?: string;
     resourceType?: ResourceType;
     includeInactive?: boolean;
   }): Promise<ShareLinkListResponse> => {
-    const response = await apiClient.get<ShareLinkListResponse>('/sharing/links', {
-      params: {
-        resourceId: params?.resourceId,
-        resourceType: params?.resourceType,
-        includeInactive: params?.includeInactive,
-      },
-    });
-    return response.data;
+    await delay();
+    let links = Array.from(shareLinks.values());
+    if (params?.resourceId) links = links.filter((l) => l.resourceId === params.resourceId);
+    if (params?.resourceType) links = links.filter((l) => l.resourceType === params.resourceType);
+    if (!params?.includeInactive) links = links.filter((l) => l.isActive);
+    return { links, total: links.length };
   },
 
-  /**
-   * Get a share link by ID
-   */
   getShareLink: async (linkId: string): Promise<ShareLink> => {
-    const response = await apiClient.get<ShareLink>(`/sharing/links/${linkId}`);
-    return response.data;
+    await delay();
+    const link = shareLinks.get(linkId);
+    if (!link) throw { response: { status: 404, data: { detail: 'Share link not found' } } };
+    return link;
   },
 
-  /**
-   * Delete a share link
-   */
   deleteShareLink: async (linkId: string): Promise<void> => {
-    await apiClient.delete(`/sharing/links/${linkId}`);
+    await delay();
+    shareLinks.delete(linkId);
   },
 
-  /**
-   * Deactivate a share link (keeps history but prevents access)
-   */
   deactivateShareLink: async (linkId: string): Promise<ShareLink> => {
-    const response = await apiClient.post<ShareLink>(`/sharing/links/${linkId}/deactivate`);
-    return response.data;
+    await delay();
+    const link = shareLinks.get(linkId);
+    if (!link) throw { response: { status: 404, data: { detail: 'Share link not found' } } };
+    link.isActive = false;
+    return link;
   },
 
-  /**
-   * Verify a share link token and get resource info
-   */
   verifyShareLink: async (token: string): Promise<ShareLinkVerification> => {
-    const response = await apiClient.get<ShareLinkVerification>(`/sharing/verify/${token}`);
-    return response.data;
+    await delay();
+    for (const link of shareLinks.values()) {
+      if (link.token === token && link.isActive) {
+        link.accessCount++;
+        link.lastAccessedAt = now();
+        return {
+          valid: true,
+          resourceId: link.resourceId,
+          resourceType: link.resourceType,
+          resourceName: findResourceName(link.resourceId),
+          permission: link.permission,
+        };
+      }
+    }
+    return {
+      valid: false,
+      resourceId: '',
+      resourceType: 'program',
+      permission: 'view',
+    };
   },
 
   // =========================================================================
   // User Sharing Operations
   // =========================================================================
 
-  /**
-   * Share a resource with a specific user
-   */
-  shareWithUser: async (request: ShareWithUserRequest): Promise<{ success: boolean; userId: string; permission: Permission }> => {
-    const response = await apiClient.post<{ success: boolean; userId: string; permission: Permission }>('/sharing/users', request);
-    return response.data;
+  shareWithUser: async (
+    request: ShareWithUserRequest
+  ): Promise<{ success: boolean; userId: string; permission: Permission }> => {
+    await delay();
+    return {
+      success: true,
+      userId: request.userId,
+      permission: request.permission || 'view',
+    };
   },
 
-  /**
-   * Revoke a user's access to a resource
-   */
-  revokeUserAccess: async (resourceType: ResourceType, resourceId: string, userId: string): Promise<void> => {
-    await apiClient.delete(`/sharing/users/${resourceType}/${resourceId}/${userId}`);
+  revokeUserAccess: async (
+    _resourceType: ResourceType,
+    _resourceId: string,
+    _userId: string
+  ): Promise<void> => {
+    await delay();
   },
 
-  /**
-   * List users a resource is shared with
-   */
-  listSharedUsers: async (resourceType: ResourceType, resourceId: string): Promise<{ users: SharedUser[]; total: number }> => {
-    const response = await apiClient.get<{ users: SharedUser[]; total: number }>(`/sharing/users/${resourceType}/${resourceId}`);
-    return response.data;
+  listSharedUsers: async (
+    _resourceType: ResourceType,
+    _resourceId: string
+  ): Promise<{ users: SharedUser[]; total: number }> => {
+    await delay();
+    return { users: [], total: 0 };
   },
 
   // =========================================================================
   // Shared With Me
   // =========================================================================
 
-  /**
-   * Get all resources shared with the current user
-   */
   getSharedWithMe: async (): Promise<SharedWithMeResponse> => {
-    const response = await apiClient.get<SharedWithMeResponse>('/sharing/shared-with-me');
-    return response.data;
+    await delay();
+    return { items: [], total: 0 };
   },
 };
 

@@ -17,7 +17,6 @@
     "@emotion/react": "^11.11.3",
     "@emotion/styled": "^11.11.0",
     "@types/dagre": "^0.7.53",
-    "axios": "^1.6.5",
     "dagre": "^0.8.5",
     "framer-motion": "^11.0.3",
     "react": "^18.2.0",
