@@ -6,16 +6,16 @@
 - **Repo**: psschwei/mellea-playground
 - **Remote**: git@github.com:psschwei/mellea-playground.git
 
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+This project uses **br** (beads_rust) for issue tracking. Run `br onboard` to get started.
 
 ## Quick Reference
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with git
+br ready              # Find available work
+br show <id>          # View issue details
+br update <id> --status in_progress  # Claim work
+br close <id>         # Complete work
+br sync --flush-only  # Sync beads (then git add + commit manually)
 ```
 
 ## Python Commands
@@ -42,7 +42,9 @@ uv run ruff check .              # Linting
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   br sync --flush-only
+   git add .beads/
+   git commit -m "sync beads"
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -63,6 +65,10 @@ uv run ruff check .              # Linting
 
 ## Beads Workflow Integration
 
+## Issue Tracking with br (beads_rust)
+
+**Note:** `br` is non-invasive and never executes git commands. After `br sync --flush-only`, you must manually run `git add .beads/ && git commit`.
+
 This project uses [beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) for issue tracking. Issues are stored in `.beads/` and tracked in git.
 
 ### Essential Commands
@@ -72,30 +78,30 @@ This project uses [beads_viewer](https://github.com/Dicklesworthstone/beads_view
 bv
 
 # CLI commands for agents (use these instead)
-bd ready              # Show issues ready to work (no blockers)
-bd list --status=open # All open issues
-bd show <id>          # Full issue details with dependencies
-bd create --title="..." --type=task --priority=2
-bd update <id> --status=in_progress
-bd close <id> --reason="Completed"
-bd close <id1> <id2>  # Close multiple issues at once
-bd sync               # Commit and push changes
+br ready              # Show issues ready to work (no blockers)
+br list --status=open # All open issues
+br show <id>          # Full issue details with dependencies
+br create --title="..." --type=task --priority=2
+br update <id> --status=in_progress
+br close <id> --reason="Completed"
+br close <id1> <id2>  # Close multiple issues at once
+br sync --flush-only  # Export beads changes (then commit manually)
 ```
 
 ### Workflow Pattern
 
-1. **Start**: Run `bd ready` to find actionable work
-2. **Claim**: Use `bd update <id> --status=in_progress`
+1. **Start**: Run `br ready` to find actionable work
+2. **Claim**: Use `br update <id> --status=in_progress`
 3. **Work**: Implement the task
-4. **Complete**: Use `bd close <id>`
-5. **Sync**: Always run `bd sync` at session end
+4. **Complete**: Use `br close <id>`
+5. **Sync**: Always run `br sync --flush-only` at session end, then commit
 
 ### Key Concepts
 
-- **Dependencies**: Issues can block other issues. `bd ready` shows only unblocked work.
+- **Dependencies**: Issues can block other issues. `br ready` shows only unblocked work.
 - **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers, not words)
 - **Types**: task, bug, feature, epic, question, docs
-- **Blocking**: `bd dep add <issue> <depends-on>` to add dependencies
+- **Blocking**: `br dep add <issue> <depends-on>` to add dependencies
 
 ### Session Protocol
 
@@ -104,19 +110,22 @@ bd sync               # Commit and push changes
 ```bash
 git status              # Check what changed
 git add <files>         # Stage code changes
-bd sync                 # Commit beads changes
-git commit -m "..."     # Commit code
-bd sync                 # Commit any new beads changes
+br sync --flush-only    # Export beads changes
+git add .beads/
+git commit -m "..."     # Commit code and beads changes
+br sync --flush-only    # Export any new beads changes
+git add .beads/
+git commit -m "sync beads"
 git push                # Push to remote
 ```
 
 ### Best Practices
 
-- Check `bd ready` at session start to find available work
+- Check `br ready` at session start to find available work
 - Update status as you work (in_progress → closed)
-- Create new issues with `bd create` when you discover tasks
+- Create new issues with `br create` when you discover tasks
 - Use descriptive titles and set appropriate priority/type
-- Always `bd sync` before ending session
+- Always `br sync --flush-only` before ending session, then commit
 
 <!-- end-bv-agent-instructions -->
 
@@ -134,11 +143,11 @@ Each agent MUST use a dedicated git worktree for their work. This isolates chang
 # Create a worktree for your task (from the main repo)
 git worktree add ../mellea-<issue-id> -b <issue-id>
 
-# Example: Working on beads-abc123
-git worktree add ../mellea-beads-abc123 -b beads-abc123
+# Example: Working on br-abc123
+git worktree add ../mellea-br-abc123 -b br-abc123
 
 # Navigate to your worktree
-cd ../mellea-beads-abc123
+cd ../mellea-br-abc123
 
 # When done, clean up the worktree
 git worktree remove ../mellea-<issue-id>
@@ -154,7 +163,7 @@ git worktree remove ../mellea-<issue-id>
 
 ```bash
 # Branch naming convention
-<issue-id>           # e.g., beads-abc123
+<issue-id>           # e.g., br-abc123
 <type>/<description> # e.g., feature/add-auth, fix/login-bug
 
 # Always create branches from latest main
@@ -164,7 +173,7 @@ git checkout -b <branch> origin/main
 
 ### Collision Prevention
 
-1. **Claim work before starting** - Use `bd update <id> --status=in_progress` so other agents know you're working on it
+1. **Claim work before starting** - Use `br update <id> --status=in_progress` so other agents know you're working on it
 2. **Keep changes focused** - One issue per branch, minimal file changes
 3. **Pull frequently** - Rebase onto main regularly to catch conflicts early
 4. **Don't modify shared files unnecessarily** - If you must edit a shared file (e.g., config), coordinate via issues
@@ -200,7 +209,7 @@ gh pr merge --squash --delete-branch
 **When direct push is OK:**
 - Trivial fixes (typos, formatting)
 - Documentation updates
-- Issue tracking updates (bd sync)
+- Issue tracking updates (br sync --flush-only + git commit)
 
 ### Quality Gates (Pre-Push Hooks)
 
@@ -258,17 +267,17 @@ Use beads issues to coordinate:
 
 ```bash
 # Signal that you're working on something
-bd update <id> --status=in_progress
+br update <id> --status=in_progress
 
 # Add comments to share context
-bd comments <id> add "Starting work on the API endpoints"
+br comments <id> add "Starting work on the API endpoints"
 
 # Create blocking issues for discovered dependencies
-bd create --title="Need to refactor X first" --type=task
-bd dep add <original-issue> <new-issue>
+br create --title="Need to refactor X first" --type=task
+br dep add <original-issue> <new-issue>
 
 # Check what others are working on
-bd list --status=in_progress
+br list --status=in_progress
 ```
 
 ### Conflict Resolution
@@ -291,8 +300,8 @@ make test              # Verify resolution didn't break anything
 ### Summary Checklist
 
 **Starting work:**
-- [ ] Check `bd ready` for available work
-- [ ] Claim the issue with `bd update <id> --status=in_progress`
+- [ ] Check `br ready` for available work
+- [ ] Claim the issue with `br update <id> --status=in_progress`
 - [ ] Create a worktree: `git worktree add ../mellea-<issue-id> -b <issue-id>`
 - [ ] Navigate to worktree and verify you're on the right branch
 
@@ -304,6 +313,6 @@ make test              # Verify resolution didn't break anything
 **Finishing work:**
 - [ ] Run all quality gates (test, lint, build)
 - [ ] Create PR for significant changes (or push directly for trivial fixes)
-- [ ] Close the issue: `bd close <id>`
-- [ ] Sync beads: `bd sync`
+- [ ] Close the issue: `br close <id>`
+- [ ] Sync beads: `br sync --flush-only && git add .beads/ && git commit -m "sync beads"`
 - [ ] Remove worktree: `git worktree remove ../mellea-<issue-id>`
