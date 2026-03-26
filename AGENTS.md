@@ -6,18 +6,6 @@
 - **Repo**: psschwei/mellea-playground
 - **Remote**: git@github.com:psschwei/mellea-playground.git
 
-This project uses **br** (beads_rust) for issue tracking. Run `br onboard` to get started.
-
-## Quick Reference
-
-```bash
-br ready              # Find available work
-br show <id>          # View issue details
-br update <id> --status in_progress  # Claim work
-br close <id>         # Complete work
-br sync --flush-only  # Sync beads (then git add + commit manually)
-```
-
 ## Python Commands
 
 All Python commands should be run using **uv**. This ensures consistent dependency management and virtual environment handling.
@@ -38,96 +26,21 @@ uv run ruff check .              # Linting
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+3. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   br sync --flush-only
-   git add .beads/
-   git commit -m "sync beads"
    git push
    git status  # MUST show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+4. **Clean up** - Clear stashes, prune remote branches
+5. **Verify** - All changes committed AND pushed
+6. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-
-
-<!-- bv-agent-instructions-v1 -->
-
----
-
-## Beads Workflow Integration
-
-## Issue Tracking with br (beads_rust)
-
-**Note:** `br` is non-invasive and never executes git commands. After `br sync --flush-only`, you must manually run `git add .beads/ && git commit`.
-
-This project uses [beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) for issue tracking. Issues are stored in `.beads/` and tracked in git.
-
-### Essential Commands
-
-```bash
-# View issues (launches TUI - avoid in automated sessions)
-bv
-
-# CLI commands for agents (use these instead)
-br ready              # Show issues ready to work (no blockers)
-br list --status=open # All open issues
-br show <id>          # Full issue details with dependencies
-br create --title="..." --type=task --priority=2
-br update <id> --status=in_progress
-br close <id> --reason="Completed"
-br close <id1> <id2>  # Close multiple issues at once
-br sync --flush-only  # Export beads changes (then commit manually)
-```
-
-### Workflow Pattern
-
-1. **Start**: Run `br ready` to find actionable work
-2. **Claim**: Use `br update <id> --status=in_progress`
-3. **Work**: Implement the task
-4. **Complete**: Use `br close <id>`
-5. **Sync**: Always run `br sync --flush-only` at session end, then commit
-
-### Key Concepts
-
-- **Dependencies**: Issues can block other issues. `br ready` shows only unblocked work.
-- **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers, not words)
-- **Types**: task, bug, feature, epic, question, docs
-- **Blocking**: `br dep add <issue> <depends-on>` to add dependencies
-
-### Session Protocol
-
-**Before ending any session, run this checklist:**
-
-```bash
-git status              # Check what changed
-git add <files>         # Stage code changes
-br sync --flush-only    # Export beads changes
-git add .beads/
-git commit -m "..."     # Commit code and beads changes
-br sync --flush-only    # Export any new beads changes
-git add .beads/
-git commit -m "sync beads"
-git push                # Push to remote
-```
-
-### Best Practices
-
-- Check `br ready` at session start to find available work
-- Update status as you work (in_progress → closed)
-- Create new issues with `br create` when you discover tasks
-- Use descriptive titles and set appropriate priority/type
-- Always `br sync --flush-only` before ending session, then commit
-
-<!-- end-bv-agent-instructions -->
 
 ---
 
@@ -143,12 +56,6 @@ Each agent MUST use a dedicated git worktree for their work. This isolates chang
 # Create a worktree for your task (from the main repo)
 git worktree add ../mellea-<issue-id> -b <issue-id>
 
-# Example: Working on br-abc123
-git worktree add ../mellea-br-abc123 -b br-abc123
-
-# Navigate to your worktree
-cd ../mellea-br-abc123
-
 # When done, clean up the worktree
 git worktree remove ../mellea-<issue-id>
 ```
@@ -163,7 +70,6 @@ git worktree remove ../mellea-<issue-id>
 
 ```bash
 # Branch naming convention
-<issue-id>           # e.g., br-abc123
 <type>/<description> # e.g., feature/add-auth, fix/login-bug
 
 # Always create branches from latest main
@@ -173,11 +79,10 @@ git checkout -b <branch> origin/main
 
 ### Collision Prevention
 
-1. **Claim work before starting** - Use `br update <id> --status=in_progress` so other agents know you're working on it
-2. **Keep changes focused** - One issue per branch, minimal file changes
-3. **Pull frequently** - Rebase onto main regularly to catch conflicts early
-4. **Don't modify shared files unnecessarily** - If you must edit a shared file (e.g., config), coordinate via issues
-5. **Small, atomic commits** - Easier to resolve conflicts and review
+1. **Keep changes focused** - One issue per branch, minimal file changes
+2. **Pull frequently** - Rebase onto main regularly to catch conflicts early
+3. **Don't modify shared files unnecessarily** - If you must edit a shared file (e.g., config), coordinate via issues
+4. **Small, atomic commits** - Easier to resolve conflicts and review
 
 ### Pull Request Workflow
 
@@ -188,10 +93,8 @@ For non-trivial changes, create a PR instead of pushing directly to main:
 git push -u origin <branch>
 
 # Create PR (use gh CLI)
-gh pr create --title "<issue-id>: Brief description" \
-  --body "Closes #<issue-number-if-applicable>
-
-## Summary
+gh pr create --title "Brief description" \
+  --body "## Summary
 - What changed
 
 ## Test Plan
@@ -209,7 +112,6 @@ gh pr merge --squash --delete-branch
 **When direct push is OK:**
 - Trivial fixes (typos, formatting)
 - Documentation updates
-- Issue tracking updates (br sync --flush-only + git commit)
 
 ### Quality Gates (Pre-Push Hooks)
 
@@ -242,7 +144,7 @@ make test          # Just tests
 ```bash
 # Before starting work
 git fetch origin
-git rebase origin/main  # or merge if you prefer
+git rebase origin/main
 
 # During work (periodically)
 git fetch origin
@@ -259,25 +161,6 @@ git fetch origin
 git rebase origin/main
 # Re-run quality gates
 git push
-```
-
-### Communication via Issues
-
-Use beads issues to coordinate:
-
-```bash
-# Signal that you're working on something
-br update <id> --status=in_progress
-
-# Add comments to share context
-br comments <id> add "Starting work on the API endpoints"
-
-# Create blocking issues for discovered dependencies
-br create --title="Need to refactor X first" --type=task
-br dep add <original-issue> <new-issue>
-
-# Check what others are working on
-br list --status=in_progress
 ```
 
 ### Conflict Resolution
@@ -300,8 +183,6 @@ make test              # Verify resolution didn't break anything
 ### Summary Checklist
 
 **Starting work:**
-- [ ] Check `br ready` for available work
-- [ ] Claim the issue with `br update <id> --status=in_progress`
 - [ ] Create a worktree: `git worktree add ../mellea-<issue-id> -b <issue-id>`
 - [ ] Navigate to worktree and verify you're on the right branch
 
@@ -313,6 +194,4 @@ make test              # Verify resolution didn't break anything
 **Finishing work:**
 - [ ] Run all quality gates (test, lint, build)
 - [ ] Create PR for significant changes (or push directly for trivial fixes)
-- [ ] Close the issue: `br close <id>`
-- [ ] Sync beads: `br sync --flush-only && git add .beads/ && git commit -m "sync beads"`
 - [ ] Remove worktree: `git worktree remove ../mellea-<issue-id>`
