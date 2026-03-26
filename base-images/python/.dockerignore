@@ -1,3 +1,0 @@
-# Ignore everything except Dockerfiles
-*
-!Dockerfile.*
