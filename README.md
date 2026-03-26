@@ -2,33 +2,53 @@
 
 > **Note:** This project is in active development. Features and APIs may change.
 
-A centralized GUI playground for cataloging, running, and composing [mellea](https://github.com/ibm-granite/mellea) programs across multiple LLMs.
-
-**Compatibility:** mellea >= 0.3.0 | Python >= 3.11
+A web-based GUI for cataloging, running, and composing [mellea](https://github.com/ibm-granite/mellea) programs across multiple LLMs.
 
 ## What is this?
 
-Mellea Playground provides a web interface for:
+Mellea Playground provides a browser interface for:
 
 - **Cataloging** programs, models, and compositions with searchable metadata
-- **Running** Python programs with `@generative` slots in isolated container environments
-- **Composing** visual workflows that chain programs and models together
+- **Composing** visual workflows that chain programs and models together via a drag-and-drop canvas
+- **Running** compositions and viewing execution logs
 - **Collaborating** by sharing assets with other users
 
 It's designed for builders who want to experiment with multi-model orchestration without managing infrastructure manually.
 
-## Quick Start
+## Tech Stack
 
-```bash
-# Create cluster, build images, and deploy everything
-make spin-up-from-scratch
-```
+- **Framework**: React 18 + TypeScript
+- **UI**: Chakra UI
+- **Visual Builder**: React Flow + Dagre (auto-layout)
+- **State**: Zustand (builder) + React Context (auth)
+- **Build**: Vite
 
-Once running, access the application at:
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8080
+The API layer uses an in-memory mock store — no backend is required to run locally.
 
 ## Development
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The app will be available at http://localhost:5173.
+
+Other useful commands:
+
+```bash
+npm run build       # Production build
+npm run lint        # Run ESLint
+npm run type-check  # TypeScript type checking
+npm test            # Run tests
+```
+
+## Deployment
+
+A `Dockerfile` and `nginx.conf` are included in `frontend/` for building a production container image.
+
+## Contributing
 
 See [AGENTS.md](./AGENTS.md) for contributor guidelines, including multi-agent collaboration practices and git workflow.
 
